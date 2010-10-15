@@ -76,7 +76,6 @@ gimp_histogram_box_init (GimpHistogramBox *box)
   GtkWidget *vbox;
   GtkWidget *vbox2;
   GtkWidget *spinbutton;
-  GtkObject *adjustment;
   GtkWidget *frame;
   GtkWidget *view;
   GtkWidget *bar;
@@ -150,34 +149,30 @@ gimp_histogram_box_init (GimpHistogramBox *box)
   gtk_widget_show (hbox);
 
   /*  low spinbutton  */
-  spinbutton = gimp_spin_button_new (&adjustment,
+  spinbutton = gimp_spin_button_new (&box->low_adj,
                                      0.0, 0.0, 255.0, 1.0, 16.0, 0.0,
                                      1.0, 0);
-  box->low_adj = GTK_ADJUSTMENT (adjustment);
   gtk_box_pack_start (GTK_BOX (hbox), spinbutton, FALSE, FALSE, 0);
   gtk_widget_show (spinbutton);
 
-  g_signal_connect (adjustment, "value-changed",
+  g_signal_connect (box->low_adj, "value-changed",
                     G_CALLBACK (gimp_histogram_box_low_adj_update),
                     box);
 
-  gimp_handle_bar_set_adjustment (GIMP_HANDLE_BAR (bar), 0,
-                                  GTK_ADJUSTMENT (adjustment));
+  gimp_handle_bar_set_adjustment (GIMP_HANDLE_BAR (bar), 0, box->low_adj);
 
   /*  high spinbutton  */
-  spinbutton = gimp_spin_button_new (&adjustment,
+  spinbutton = gimp_spin_button_new (&box->high_adj,
                                      255.0, 0.0, 255.0, 1.0, 16.0, 0.0,
                                      1.0, 0);
-  box->high_adj = GTK_ADJUSTMENT (adjustment);
   gtk_box_pack_end (GTK_BOX (hbox), spinbutton, FALSE, FALSE, 0);
   gtk_widget_show (spinbutton);
 
-  g_signal_connect (adjustment, "value-changed",
+  g_signal_connect (box->high_adj, "value-changed",
                     G_CALLBACK (gimp_histogram_box_high_adj_update),
                     box);
 
-  gimp_handle_bar_set_adjustment (GIMP_HANDLE_BAR (bar), 2,
-                                  GTK_ADJUSTMENT (adjustment));
+  gimp_handle_bar_set_adjustment (GIMP_HANDLE_BAR (bar), 2, box->high_adj);
 
 #ifdef DEBUG_VIEW
   spinbutton = gimp_prop_spin_button_new (G_OBJECT (box->view), "border-width",
