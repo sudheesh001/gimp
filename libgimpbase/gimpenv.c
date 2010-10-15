@@ -135,13 +135,13 @@ gimp_env_init (gboolean plug_in)
  * gimp_directory:
  *
  * Returns the user-specific GIMP settings directory. If the
- * environment variable GIMP2_DIRECTORY exists, it is used. If it is
+ * environment variable GIMP3_DIRECTORY exists, it is used. If it is
  * an absolute path, it is used as is.  If it is a relative path, it
  * is taken to be a subdirectory of the home directory. If it is a
  * relative path, and no home directory can be determined, it is taken
  * to be a subdirectory of gimp_data_directory().
  *
- * The usual case is that no GIMP2_DIRECTORY environment variable
+ * The usual case is that no GIMP3_DIRECTORY environment variable
  * exists, and then we use the GIMPDIR subdirectory of the home
  * directory. If no home directory exists, we use a per-user
  * subdirectory of gimp_data_directory().  In any case, we always
@@ -164,17 +164,17 @@ gimp_directory (void)
   const gchar  *env_gimp_dir;
   const gchar  *home_dir;
 
-  env_gimp_dir = g_getenv ("GIMP2_DIRECTORY");
+  env_gimp_dir = g_getenv ("GIMP3_DIRECTORY");
 
   if (gimp_dir)
     {
-      gboolean gimp2_directory_changed = FALSE;
+      gboolean gimp3_directory_changed = FALSE;
 
       /* We have constructed the gimp_dir already. We can return
        * gimp_dir unless some parameter gimp_dir depends on has
-       * changed. For now we just check for changes to GIMP2_DIRECTORY
+       * changed. For now we just check for changes to GIMP3_DIRECTORY
        */
-      gimp2_directory_changed =
+      gimp3_directory_changed =
         (env_gimp_dir == NULL &&
          last_env_gimp_dir != NULL) ||
         (env_gimp_dir != NULL &&
@@ -183,7 +183,7 @@ gimp_directory (void)
          last_env_gimp_dir != NULL &&
          strcmp (env_gimp_dir, last_env_gimp_dir) != 0);
 
-      if (! gimp2_directory_changed)
+      if (! gimp3_directory_changed)
         {
           return gimp_dir;
         }
@@ -195,7 +195,7 @@ gimp_directory (void)
         }
     }
 
-  /* Remember the GIMP2_DIRECTORY to next invocation so we can check
+  /* Remember the GIMP3_DIRECTORY to next invocation so we can check
    * if it changes
    */
   g_free (last_env_gimp_dir);
@@ -348,7 +348,7 @@ gimp_toplevel_directory (void)
  * gimp_data_directory:
  *
  * Returns the top directory for GIMP data. If the environment
- * variable GIMP2_DATADIR exists, that is used.  It should be an
+ * variable GIMP3_DATADIR exists, that is used.  It should be an
  * absolute pathname.  Otherwise, on Unix the compile-time defined
  * directory is used. On Windows, the installation directory as deduced
  * from the executable's full filename is used.
@@ -369,7 +369,7 @@ gimp_data_directory (void)
     {
       gchar *tmp = _gimp_reloc_find_data_dir (DATADIR);
 
-      gimp_data_dir = gimp_env_get_dir ("GIMP2_DATADIR", tmp);
+      gimp_data_dir = gimp_env_get_dir ("GIMP3_DATADIR", tmp);
       g_free (tmp);
     }
 
@@ -380,7 +380,7 @@ gimp_data_directory (void)
  * gimp_locale_directory:
  *
  * Returns the top directory for GIMP locale files. If the environment
- * variable GIMP2_LOCALEDIR exists, that is used.  It should be an
+ * variable GIMP3_LOCALEDIR exists, that is used.  It should be an
  * absolute pathname.  Otherwise, on Unix the compile-time defined
  * directory is used. On Windows, the installation directory as deduced
  * from the executable's full filename is used.
@@ -404,7 +404,7 @@ gimp_locale_directory (void)
     {
       gchar *tmp = _gimp_reloc_find_locale_dir (LOCALEDIR);
 
-      gimp_locale_dir = gimp_env_get_dir ("GIMP2_LOCALEDIR", tmp);
+      gimp_locale_dir = gimp_env_get_dir ("GIMP3_LOCALEDIR", tmp);
       g_free (tmp);
 #ifdef G_OS_WIN32
       tmp = g_win32_locale_filename_from_utf8 (gimp_locale_dir);
@@ -420,7 +420,7 @@ gimp_locale_directory (void)
  * gimp_sysconf_directory:
  *
  * Returns the top directory for GIMP config files. If the environment
- * variable GIMP2_SYSCONFDIR exists, that is used.  It should be an
+ * variable GIMP3_SYSCONFDIR exists, that is used.  It should be an
  * absolute pathname.  Otherwise, on Unix the compile-time defined
  * directory is used. On Windows, the installation directory as deduced
  * from the executable's full filename is used.
@@ -441,7 +441,7 @@ gimp_sysconf_directory (void)
     {
       gchar *tmp = _gimp_reloc_find_etc_dir (SYSCONFDIR);
 
-      gimp_sysconf_dir = gimp_env_get_dir ("GIMP2_SYSCONFDIR", tmp);
+      gimp_sysconf_dir = gimp_env_get_dir ("GIMP3_SYSCONFDIR", tmp);
       g_free (tmp);
     }
 
@@ -469,7 +469,7 @@ gimp_user_directory (GimpUserDirectory type)
  * gimp_plug_in_directory:
  *
  * Returns the top directory for GIMP plug_ins and modules. If the
- * environment variable GIMP2_PLUGINDIR exists, that is used.  It
+ * environment variable GIMP3_PLUGINDIR exists, that is used.  It
  * should be an absolute pathname. Otherwise, on Unix the compile-time
  * defined directory is used. On Windows, the installation directory as
  * deduced from the executable's full filename is used.
@@ -490,7 +490,7 @@ gimp_plug_in_directory (void)
     {
       gchar *tmp = _gimp_reloc_find_plugin_dir (PLUGINDIR);
 
-      gimp_plug_in_dir = gimp_env_get_dir ("GIMP2_PLUGINDIR", tmp);
+      gimp_plug_in_dir = gimp_env_get_dir ("GIMP3_PLUGINDIR", tmp);
       g_free (tmp);
     }
 

@@ -8,17 +8,17 @@ endif
 
 SUBDIRS = $(D_pdbgen)
 
-bin_PROGRAMS = gimptool-2.0
+bin_PROGRAMS = gimptool-3.0
 
 noinst_PROGRAMS = test-clipboard
 
 EXTRA_PROGRAMS = \
 	kernelgen
 
-gimptool_2_0_SOURCES = \
+gimptool_3_0_SOURCES = \
 	gimptool.c
 
-gimptool_2_0_LDADD = \
+gimptool_3_0_LDADD = \
 	$(GTK_LIBS)
 
 kernelgen_SOURCES = kernelgen.c
