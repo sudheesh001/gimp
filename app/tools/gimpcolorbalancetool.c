@@ -190,7 +190,7 @@ create_levels_scale (gdouble        value,
                     GTK_SHRINK | GTK_FILL, GTK_SHRINK | GTK_FILL, 0, 0);
   gtk_widget_show (label);
 
-  spinbutton = gimp_spin_button_new ((GtkObject **) &adj,
+  spinbutton = gimp_spin_button_new (&adj,
                                      value, -100.0, 100.0,
                                      1.0, 10.0, 0.0, 1.0, 0);
 

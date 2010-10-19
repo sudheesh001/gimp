@@ -250,7 +250,7 @@ gimp_brightness_contrast_tool_dialog (GimpImageMapTool *image_map_tool)
   GtkWidget                    *main_vbox;
   GtkWidget                    *table;
   GtkWidget                    *button;
-  GtkObject                    *data;
+  GtkAdjustment                *data;
 
   bc_tool = GIMP_BRIGHTNESS_CONTRAST_TOOL (image_map_tool);
   config  = bc_tool->config;
@@ -271,7 +271,7 @@ gimp_brightness_contrast_tool_dialog (GimpImageMapTool *image_map_tool)
                                -127.0, 127.0, 1.0, 10.0, 0,
                                TRUE, 0.0, 0.0,
                                NULL, NULL);
-  bc_tool->brightness_data = GTK_ADJUSTMENT (data);
+  bc_tool->brightness_data = data;
 
   g_signal_connect (data, "value-changed",
                     G_CALLBACK (brightness_contrast_brightness_changed),

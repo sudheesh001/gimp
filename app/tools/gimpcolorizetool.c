@@ -193,7 +193,7 @@ gimp_colorize_tool_dialog (GimpImageMapTool *image_map_tool)
   GtkWidget        *vbox;
   GtkWidget        *hbox;
   GtkWidget        *button;
-  GtkObject        *data;
+  GtkAdjustment    *data;
   GimpRGB           color;
 
   main_vbox = gimp_image_map_tool_dialog_get_vbox (image_map_tool);
@@ -220,7 +220,7 @@ gimp_colorize_tool_dialog (GimpImageMapTool *image_map_tool)
                                0.0, 359.99, 1.0, 15.0, 0,
                                TRUE, 0.0, 0.0,
                                NULL, NULL);
-  col_tool->hue_data = GTK_ADJUSTMENT (data);
+  col_tool->hue_data = data;
 
   g_signal_connect (data, "value-changed",
                     G_CALLBACK (colorize_hue_changed),
@@ -233,7 +233,7 @@ gimp_colorize_tool_dialog (GimpImageMapTool *image_map_tool)
                                0.0, 100.0, 1.0, 10.0, 0,
                                TRUE, 0.0, 0.0,
                                NULL, NULL);
-  col_tool->saturation_data = GTK_ADJUSTMENT (data);
+  col_tool->saturation_data = data;
 
   g_signal_connect (data, "value-changed",
                     G_CALLBACK (colorize_saturation_changed),
@@ -246,7 +246,7 @@ gimp_colorize_tool_dialog (GimpImageMapTool *image_map_tool)
                                -100.0, 100.0, 1.0, 10.0, 0,
                                TRUE, 0.0, 0.0,
                                NULL, NULL);
-  col_tool->lightness_data = GTK_ADJUSTMENT (data);
+  col_tool->lightness_data = data;
 
   g_signal_connect (data, "value-changed",
                     G_CALLBACK (colorize_lightness_changed),

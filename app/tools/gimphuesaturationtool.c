@@ -192,7 +192,7 @@ gimp_hue_saturation_tool_dialog (GimpImageMapTool *image_map_tool)
   GtkWidget               *button;
   GtkWidget               *frame;
   GtkWidget               *hbox;
-  GtkObject               *data;
+  GtkAdjustment           *data;
   GtkSizeGroup            *label_group;
   GtkSizeGroup            *spinner_group;
   GSList                  *group = NULL;
@@ -315,7 +315,7 @@ gimp_hue_saturation_tool_dialog (GimpImageMapTool *image_map_tool)
                                0.0, 100.0, 1.0, 15.0, 0,
                                TRUE, 0.0, 0.0,
                                NULL, NULL);
-  hs_tool->overlap_data = GTK_ADJUSTMENT (data);
+  hs_tool->overlap_data = data;
 
   gtk_size_group_add_widget (label_group, GIMP_SCALE_ENTRY_LABEL (data));
   gtk_size_group_add_widget (spinner_group, GIMP_SCALE_ENTRY_SPINBUTTON (data));
@@ -348,7 +348,7 @@ gimp_hue_saturation_tool_dialog (GimpImageMapTool *image_map_tool)
                                -180.0, 180.0, 1.0, 15.0, 0,
                                TRUE, 0.0, 0.0,
                                NULL, NULL);
-  hs_tool->hue_data = GTK_ADJUSTMENT (data);
+  hs_tool->hue_data = data;
 
   gtk_size_group_add_widget (label_group, GIMP_SCALE_ENTRY_LABEL (data));
   gtk_size_group_add_widget (spinner_group, GIMP_SCALE_ENTRY_SPINBUTTON (data));
@@ -364,7 +364,7 @@ gimp_hue_saturation_tool_dialog (GimpImageMapTool *image_map_tool)
                                -100.0, 100.0, 1.0, 10.0, 0,
                                TRUE, 0.0, 0.0,
                                NULL, NULL);
-  hs_tool->lightness_data = GTK_ADJUSTMENT (data);
+  hs_tool->lightness_data = data;
 
   gtk_size_group_add_widget (label_group, GIMP_SCALE_ENTRY_LABEL (data));
   gtk_size_group_add_widget (spinner_group, GIMP_SCALE_ENTRY_SPINBUTTON (data));
@@ -380,7 +380,7 @@ gimp_hue_saturation_tool_dialog (GimpImageMapTool *image_map_tool)
                                -100.0, 100.0, 1.0, 10.0, 0,
                                TRUE, 0.0, 0.0,
                                NULL, NULL);
-  hs_tool->saturation_data = GTK_ADJUSTMENT (data);
+  hs_tool->saturation_data = data;
 
   gtk_size_group_add_widget (label_group, GIMP_SCALE_ENTRY_LABEL (data));
   gtk_size_group_add_widget (spinner_group, GIMP_SCALE_ENTRY_SPINBUTTON (data));
