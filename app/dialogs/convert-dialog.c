@@ -98,7 +98,7 @@ convert_dialog_new (GimpImage    *image,
   GtkWidget     *vbox;
   GtkWidget     *hbox;
   GtkWidget     *label;
-  GtkObject     *adjustment;
+  GtkAdjustment *adjustment;
   GtkWidget     *spinbutton;
   GtkWidget     *frame;
   GtkWidget     *toggle;
