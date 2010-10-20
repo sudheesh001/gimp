@@ -239,15 +239,18 @@ gimp_display_shell_canvas_draw (GtkWidget        *widget,
     {
       if (gimp_display_get_image (shell->display))
         {
-#if 0
           if (gimp_display_shell_is_double_buffered (shell))
-            gdk_window_begin_paint_region (eevent->window, eevent->region);
-#endif
-        }
+            {
+              cairo_push_group (cr);
+            }
 
-      if (gimp_display_get_image (shell->display))
-        {
           gimp_display_shell_canvas_draw_image (shell, cr);
+
+          if (gimp_display_shell_is_double_buffered (shell))
+            {
+              cairo_pop_group_to_source (cr);
+              cairo_paint (cr);
+            }
         }
       else
         {
@@ -272,10 +275,6 @@ gimp_display_shell_canvas_draw_after (GtkWidget        *widget,
     {
       if (gimp_display_get_image (shell->display))
         {
-#if 0
-          if (gimp_display_shell_is_double_buffered (shell))
-            gdk_window_end_paint (eevent->window);
-#endif
         }
     }
 
