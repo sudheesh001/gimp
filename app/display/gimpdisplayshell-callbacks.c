@@ -487,18 +487,13 @@ gimp_display_shell_canvas_draw_image (GimpDisplayShell *shell,
 
   if (! cairo_region_is_empty (clear_region))
     {
-#if 0
-      gdk_region_get_rectangles (clear_region, &rects, &n_rects);
+      cairo_save (cr);
 
-      for (i = 0; i < n_rects; i++)
-        gdk_window_clear_area (gtk_widget_get_window (shell->canvas),
-                               rects[i].x,
-                               rects[i].y,
-                               rects[i].width,
-                               rects[i].height);
+      gdk_cairo_region (cr, clear_region);
+      cairo_clip (cr);
+      gimp_display_shell_draw_background (shell, cr);
 
-      g_free (rects);
-#endif
+      cairo_restore (cr);
     }
 
   /*  then, draw the exposed part of the region that is inside the
@@ -559,5 +554,7 @@ static void
 gimp_display_shell_canvas_draw_drop_zone (GimpDisplayShell *shell,
                                           cairo_t          *cr)
 {
+  gimp_display_shell_draw_background (shell, cr);
+
   gimp_cairo_draw_drop_wilber (shell->canvas, cr);
 }
