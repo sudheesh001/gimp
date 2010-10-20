@@ -559,11 +559,11 @@ gimp_display_shell_constructed (GObject *object)
   g_signal_connect (shell->canvas, "size-allocate",
                     G_CALLBACK (gimp_display_shell_canvas_size_allocate),
                     shell);
-  g_signal_connect (shell->canvas, "expose-event",
-                    G_CALLBACK (gimp_display_shell_canvas_expose),
+  g_signal_connect (shell->canvas, "draw",
+                    G_CALLBACK (gimp_display_shell_canvas_draw),
                     shell);
-  g_signal_connect_after (shell->canvas, "expose-event",
-                          G_CALLBACK (gimp_display_shell_canvas_expose_after),
+  g_signal_connect_after (shell->canvas, "draw",
+                          G_CALLBACK (gimp_display_shell_canvas_draw_after),
                           shell);
 
   g_signal_connect (shell->canvas, "enter-notify-event",
