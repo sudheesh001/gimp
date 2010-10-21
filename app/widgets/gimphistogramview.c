@@ -317,10 +317,7 @@ gimp_histogram_view_draw (GtkWidget *widget,
   cairo_stroke (cr);
 
   if (! view->histogram && ! view->bg_histogram)
-    {
-      cairo_destroy (cr);
-      return FALSE;
-    }
+    return FALSE;
 
   x1 = CLAMP (MIN (view->start, view->end), 0, 255);
   x2 = CLAMP (MAX (view->start, view->end), 0, 255);
