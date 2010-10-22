@@ -255,13 +255,13 @@ run (const gchar      *name,
 static gboolean
 cubism_dialog (GimpDrawable *drawable)
 {
-  GtkWidget *dialog;
-  GtkWidget *main_vbox;
-  GtkWidget *preview;
-  GtkWidget *toggle;
-  GtkWidget *table;
-  GtkObject *scale_data;
-  gboolean   run;
+  GtkWidget     *dialog;
+  GtkWidget     *main_vbox;
+  GtkWidget     *preview;
+  GtkWidget     *toggle;
+  GtkWidget     *table;
+  GtkAdjustment *scale_data;
+  gboolean       run;
 
   gimp_ui_init (PLUG_IN_BINARY, FALSE);
 

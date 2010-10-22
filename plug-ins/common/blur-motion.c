@@ -125,11 +125,11 @@ static mblur_vals_t mbvals =
 };
 
 
-static GtkObject *length     = NULL;
-static GtkObject *angle      = NULL;
-static GtkWidget *center     = NULL;
-static GtkWidget *dir_button = NULL;
-static GtkWidget *preview    = NULL;
+static GtkAdjustment *length     = NULL;
+static GtkAdjustment *angle      = NULL;
+static GtkWidget     *center     = NULL;
+static GtkWidget     *dir_button = NULL;
+static GtkWidget     *preview    = NULL;
 
 static gint       img_width, img_height, img_bpp;
 static gboolean   has_alpha;
@@ -994,18 +994,18 @@ static gboolean
 mblur_dialog (gint32        image_ID,
               GimpDrawable *drawable)
 {
-  GtkWidget *dialog;
-  GtkWidget *main_vbox;
-  GtkWidget *hbox;
-  GtkWidget *vbox;
-  GtkWidget *frame;
-  GtkWidget *table;
-  GtkWidget *entry;
-  GtkWidget *spinbutton;
-  GtkWidget *button;
-  GtkObject *adj;
-  gdouble    xres, yres;
-  gboolean   run;
+  GtkWidget     *dialog;
+  GtkWidget     *main_vbox;
+  GtkWidget     *hbox;
+  GtkWidget     *vbox;
+  GtkWidget     *frame;
+  GtkWidget     *table;
+  GtkWidget     *entry;
+  GtkWidget     *spinbutton;
+  GtkWidget     *button;
+  GtkAdjustment *adj;
+  gdouble        xres, yres;
+  gboolean       run;
 
   gimp_ui_init (PLUG_IN_BINARY, FALSE);
 
