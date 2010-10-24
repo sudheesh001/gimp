@@ -852,11 +852,11 @@ p_to_XJTUnitType(GimpUnit intype)
 static gboolean
 save_dialog (void)
 {
-  GtkWidget *dlg;
-  GtkWidget *table;
-  GtkWidget *toggle;
-  GtkObject *scale_data;
-  gboolean   run;
+  GtkWidget     *dlg;
+  GtkWidget     *table;
+  GtkWidget     *toggle;
+  GtkAdjustment *scale_data;
+  gboolean       run;
 
   gimp_ui_init (PLUG_IN_BINARY, FALSE);
 
