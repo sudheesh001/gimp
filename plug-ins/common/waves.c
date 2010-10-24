@@ -233,16 +233,16 @@ waves (GimpDrawable *drawable)
 static gboolean
 waves_dialog (GimpDrawable *drawable)
 {
-  GtkWidget *dialog;
-  GtkWidget *main_vbox;
-  GtkWidget *frame;
-  GtkWidget *smear;
-  GtkWidget *blacken;
-  GtkWidget *table;
-  GtkWidget *preview;
-  GtkWidget *toggle;
-  GtkObject *adj;
-  gboolean   run;
+  GtkWidget     *dialog;
+  GtkWidget     *main_vbox;
+  GtkWidget     *frame;
+  GtkWidget     *smear;
+  GtkWidget     *blacken;
+  GtkWidget     *table;
+  GtkWidget     *preview;
+  GtkWidget     *toggle;
+  GtkAdjustment *adj;
+  gboolean       run;
 
   gimp_ui_init (PLUG_IN_BINARY, TRUE);
 

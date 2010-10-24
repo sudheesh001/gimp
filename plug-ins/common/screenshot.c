@@ -1065,20 +1065,20 @@ shoot_radio_button_toggled (GtkWidget *widget,
 static gboolean
 shoot_dialog (GdkScreen **screen)
 {
-  GtkWidget *dialog;
-  GtkWidget *main_vbox;
-  GtkWidget *notebook;
-  GtkWidget *frame;
-  GtkWidget *vbox;
-  GtkWidget *hbox;
-  GtkWidget *label;
-  GtkWidget *button;
-  GtkWidget *toggle;
-  GtkWidget *spinner;
-  GdkPixbuf *pixbuf;
-  GSList    *radio_group = NULL;
-  GtkObject *adj;
-  gboolean   run;
+  GtkWidget     *dialog;
+  GtkWidget     *main_vbox;
+  GtkWidget     *notebook;
+  GtkWidget     *frame;
+  GtkWidget     *vbox;
+  GtkWidget     *hbox;
+  GtkWidget     *label;
+  GtkWidget     *button;
+  GtkWidget     *toggle;
+  GtkWidget     *spinner;
+  GdkPixbuf     *pixbuf;
+  GSList        *radio_group = NULL;
+  GtkAdjustment *adj;
+  gboolean       run;
 
   gimp_ui_init (PLUG_IN_BINARY, FALSE);
 

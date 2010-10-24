@@ -713,14 +713,14 @@ randomize (GimpDrawable *drawable,
 static gboolean
 randomize_dialog (GimpDrawable *drawable)
 {
-  GtkWidget *dlg;
-  GtkWidget *table;
-  GtkWidget *label;
-  GtkWidget *seed_hbox;
-  GtkWidget *main_vbox;
-  GtkWidget *preview;
-  GtkObject *adj;
-  gboolean   run;
+  GtkWidget     *dlg;
+  GtkWidget     *table;
+  GtkWidget     *label;
+  GtkWidget     *seed_hbox;
+  GtkWidget     *main_vbox;
+  GtkWidget     *preview;
+  GtkAdjustment *adj;
+  gboolean       run;
 
   gimp_ui_init (PLUG_IN_BINARY, FALSE);
 

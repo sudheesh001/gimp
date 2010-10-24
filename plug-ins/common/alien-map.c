@@ -114,25 +114,25 @@ static alienmap2_vals_t wvals =
   TRUE
 };
 
-static GimpDrawable *drawable         = NULL;
+static GimpDrawable  *drawable         = NULL;
 
-static GtkWidget    *toggle_modify_rh = NULL;
-static GtkWidget    *toggle_modify_gs = NULL;
-static GtkWidget    *toggle_modify_bl = NULL;
+static GtkWidget     *toggle_modify_rh = NULL;
+static GtkWidget     *toggle_modify_gs = NULL;
+static GtkWidget     *toggle_modify_bl = NULL;
 
-static GtkWidget    *label_freq_rh    = NULL;
-static GtkWidget    *label_freq_gs    = NULL;
-static GtkWidget    *label_freq_bl    = NULL;
-static GtkWidget    *label_phase_rh   = NULL;
-static GtkWidget    *label_phase_gs   = NULL;
-static GtkWidget    *label_phase_bl   = NULL;
+static GtkWidget     *label_freq_rh    = NULL;
+static GtkWidget     *label_freq_gs    = NULL;
+static GtkWidget     *label_freq_bl    = NULL;
+static GtkWidget     *label_phase_rh   = NULL;
+static GtkWidget     *label_phase_gs   = NULL;
+static GtkWidget     *label_phase_bl   = NULL;
 
-static GtkObject    *entry_freq_rh    = NULL;
-static GtkObject    *entry_freq_gs    = NULL;
-static GtkObject    *entry_freq_bl    = NULL;
-static GtkObject    *entry_phase_rh   = NULL;
-static GtkObject    *entry_phase_gs   = NULL;
-static GtkObject    *entry_phase_bl   = NULL;
+static GtkAdjustment *entry_freq_rh    = NULL;
+static GtkAdjustment *entry_freq_gs    = NULL;
+static GtkAdjustment *entry_freq_bl    = NULL;
+static GtkAdjustment *entry_phase_rh   = NULL;
+static GtkAdjustment *entry_phase_gs   = NULL;
+static GtkAdjustment *entry_phase_bl   = NULL;
 
 
 static const gchar *ctext[][2] =
@@ -377,16 +377,16 @@ alienmap2 (GimpDrawable *drawable)
 static gint
 alienmap2_dialog (void)
 {
-  GtkWidget *dialog;
-  GtkWidget *main_vbox;
-  GtkWidget *top_table;
-  GtkWidget *frame;
-  GtkWidget *toggle;
-  GtkWidget *hbox;
-  GtkWidget *vbox;
-  GtkWidget *table;
-  GtkObject *adj;
-  gboolean   run;
+  GtkWidget     *dialog;
+  GtkWidget     *main_vbox;
+  GtkWidget     *top_table;
+  GtkWidget     *frame;
+  GtkWidget     *toggle;
+  GtkWidget     *hbox;
+  GtkWidget     *vbox;
+  GtkWidget     *table;
+  GtkAdjustment *adj;
+  gboolean       run;
 
   gimp_ui_init (PLUG_IN_BINARY, TRUE);
 

@@ -130,12 +130,12 @@ static gboolean
 dialog (gint32        image_id,
         GimpDrawable *drawable)
 {
-  GtkWidget *dialog;
-  GtkWidget *preview;
-  GtkWidget *table;
-  GtkWidget *main_vbox;
-  GtkObject *adj;
-  gboolean   run = FALSE;
+  GtkWidget     *dialog;
+  GtkWidget     *preview;
+  GtkWidget     *table;
+  GtkWidget     *main_vbox;
+  GtkAdjustment *adj;
+  gboolean       run = FALSE;
 
   gimp_ui_init (PLUG_IN_BINARY, TRUE);
 
