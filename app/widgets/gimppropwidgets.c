@@ -483,12 +483,12 @@ gimp_prop_spin_scale_new (GObject     *config,
                           gdouble      page_increment,
                           gint         digits)
 {
-  GParamSpec *param_spec;
-  GtkObject  *adjustment;
-  GtkWidget  *scale;
-  gdouble     value;
-  gdouble     lower;
-  gdouble     upper;
+  GParamSpec    *param_spec;
+  GtkAdjustment *adjustment;
+  GtkWidget     *scale;
+  gdouble        value;
+  gdouble        lower;
+  gdouble        upper;
 
   param_spec = find_param_spec (config, property_name, G_STRFUNC);
   if (! param_spec)
@@ -504,7 +504,7 @@ gimp_prop_spin_scale_new (GObject     *config,
   adjustment = gtk_adjustment_new (value, lower, upper,
                                    step_increment, page_increment, 0.0);
 
-  scale = gimp_spin_scale_new (GTK_ADJUSTMENT (adjustment), label, digits);
+  scale = gimp_spin_scale_new (adjustment, label, digits);
 
   set_param_spec (G_OBJECT (adjustment), scale, param_spec);
 
@@ -553,12 +553,12 @@ gimp_prop_opacity_spin_scale_new (GObject     *config,
                                   const gchar *property_name,
                                   const gchar *label)
 {
-  GParamSpec *param_spec;
-  GtkObject  *adjustment;
-  GtkWidget  *scale;
-  gdouble     value;
-  gdouble     lower;
-  gdouble     upper;
+  GParamSpec    *param_spec;
+  GtkAdjustment *adjustment;
+  GtkWidget     *scale;
+  gdouble        value;
+  gdouble        lower;
+  gdouble        upper;
 
   param_spec = check_param_spec_w (config, property_name,
                                    G_TYPE_PARAM_DOUBLE, G_STRFUNC);
@@ -573,7 +573,7 @@ gimp_prop_opacity_spin_scale_new (GObject     *config,
 
   adjustment = gtk_adjustment_new (value, lower, upper, 1.0, 10.0, 0.0);
 
-  scale = gimp_spin_scale_new (GTK_ADJUSTMENT (adjustment), label, 1);
+  scale = gimp_spin_scale_new (adjustment, label, 1);
 
   set_param_spec (G_OBJECT (adjustment), scale, param_spec);
   g_object_set_data (G_OBJECT (adjustment),
