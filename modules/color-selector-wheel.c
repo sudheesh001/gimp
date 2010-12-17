@@ -149,18 +149,22 @@ colorsel_wheel_size_allocate (GtkWidget     *frame,
                               GtkAllocation *allocation,
                               ColorselWheel *wheel)
 {
-  GtkStyle *style = gtk_widget_get_style (frame);
-  gint      focus_width;
-  gint      focus_padding;
-  gint      size;
+  GtkStyleContext *context = gtk_widget_get_style_context (frame);
+  GtkBorder        border;
+  gint             focus_width;
+  gint             focus_padding;
+  gint             size;
 
   gtk_widget_style_get (frame,
                         "focus-line-width", &focus_width,
                         "focus-padding",    &focus_padding,
                         NULL);
 
+  gtk_style_context_get_border (context, gtk_widget_get_state_flags (frame),
+                                &border);
+
   size = (MIN (allocation->width, allocation->height) -
-          2 * MAX (style->xthickness, style->ythickness) -
+          MAX (border.left + border.right, border.top + border.bottom) -
           2 * (focus_width + focus_padding));
 
   gtk_hsv_set_metrics (GTK_HSV (wheel->hsv), size, size / 10);
