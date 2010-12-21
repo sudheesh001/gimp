@@ -102,8 +102,8 @@ static void   gimp_page_selector_set_property      (GObject          *object,
                                                     guint             property_id,
                                                     const GValue     *value,
                                                     GParamSpec       *pspec);
-static void   gimp_page_selector_style_set         (GtkWidget        *widget,
-                                                    GtkStyle         *prev_style);
+
+static void   gimp_page_selector_style_updated     (GtkWidget        *widget);
 
 static void   gimp_page_selector_selection_changed (GtkIconView      *icon_view,
                                                     GimpPageSelector *selector);
@@ -141,15 +141,15 @@ gimp_page_selector_class_init (GimpPageSelectorClass *klass)
   GObjectClass   *object_class = G_OBJECT_CLASS (klass);
   GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
 
-  object_class->dispose      = gimp_page_selector_dispose;
-  object_class->finalize     = gimp_page_selector_finalize;
-  object_class->get_property = gimp_page_selector_get_property;
-  object_class->set_property = gimp_page_selector_set_property;
+  object_class->dispose       = gimp_page_selector_dispose;
+  object_class->finalize      = gimp_page_selector_finalize;
+  object_class->get_property  = gimp_page_selector_get_property;
+  object_class->set_property  = gimp_page_selector_set_property;
 
-  widget_class->style_set    = gimp_page_selector_style_set;
+  widget_class->style_updated = gimp_page_selector_style_updated;
 
-  klass->selection_changed   = NULL;
-  klass->activate            = NULL;
+  klass->selection_changed    = NULL;
+  klass->activate             = NULL;
 
   /**
    * GimpPageSelector::selection-changed:
@@ -415,8 +415,7 @@ gimp_page_selector_set_property (GObject      *object,
 }
 
 static void
-gimp_page_selector_style_set (GtkWidget *widget,
-                              GtkStyle  *prev_style)
+gimp_page_selector_style_updated (GtkWidget *widget)
 {
   GimpPageSelectorPrivate *priv = GIMP_PAGE_SELECTOR_GET_PRIVATE (widget);
   PangoLayout             *layout;
@@ -426,8 +425,7 @@ gimp_page_selector_style_set (GtkWidget *widget,
   gint                     focus_padding;
   gint                     item_width;
 
-  if (GTK_WIDGET_CLASS (parent_class)->style_set)
-    GTK_WIDGET_CLASS (parent_class)->style_set (widget, prev_style);
+  GTK_WIDGET_CLASS (parent_class)->style_updated (widget);
 
   layout = gtk_widget_create_pango_layout (widget, _("Page 000"));
   pango_layout_get_extents (layout, &ink_rect, &logical_rect);
