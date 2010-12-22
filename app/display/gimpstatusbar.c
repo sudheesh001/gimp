@@ -73,8 +73,7 @@ static void     gimp_statusbar_progress_iface_init (GimpProgressInterface *iface
 static void     gimp_statusbar_dispose            (GObject           *object);
 static void     gimp_statusbar_finalize           (GObject           *object);
 
-static void     gimp_statusbar_hbox_style_set     (GtkWidget         *widget,
-                                                   GtkStyle          *prev_style,
+static void     gimp_statusbar_hbox_style_updated (GtkWidget         *widget,
                                                    GimpStatusbar     *statusbar);
 
 static GimpProgress *
@@ -186,8 +185,8 @@ gimp_statusbar_init (GimpStatusbar *statusbar)
 
   gtk_container_remove (GTK_CONTAINER (hbox), statusbar->label);
 
-  g_signal_connect_after (hbox, "style-set",
-                          G_CALLBACK (gimp_statusbar_hbox_style_set),
+  g_signal_connect_after (hbox, "style-updated",
+                          G_CALLBACK (gimp_statusbar_hbox_style_updated),
                           statusbar);
 
   statusbar->cursor_label = gtk_label_new ("8888, 8888");
@@ -296,9 +295,8 @@ gimp_statusbar_finalize (GObject *object)
 }
 
 static void
-gimp_statusbar_hbox_style_set (GtkWidget     *widget,
-                               GtkStyle      *prev_style,
-                               GimpStatusbar *statusbar)
+gimp_statusbar_hbox_style_updated (GtkWidget     *widget,
+                                   GimpStatusbar *statusbar)
 {
   GtkRequisition  requisition;
   GtkRequisition  child_requisition;
