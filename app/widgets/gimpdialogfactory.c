@@ -1536,7 +1536,7 @@ gimp_dialog_factory_set_busy (GimpDialogFactory *factory)
               display = gtk_widget_get_display (widget);
 
               if (cursor)
-                gdk_cursor_unref (cursor);
+                g_object_unref (cursor);
 
               cursor = gimp_cursor_new (display,
                                         GIMP_CURSOR_FORMAT_BITMAP,
@@ -1552,7 +1552,7 @@ gimp_dialog_factory_set_busy (GimpDialogFactory *factory)
     }
 
   if (cursor)
-    gdk_cursor_unref (cursor);
+    g_object_unref (cursor);
 }
 
 void

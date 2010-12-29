@@ -422,5 +422,5 @@ gimp_cursor_set (GtkWidget          *widget,
                             tool_cursor,
                             modifier);
   gdk_window_set_cursor (gtk_widget_get_window (widget), cursor);
-  gdk_cursor_unref (cursor);
+  g_object_unref (cursor);
 }

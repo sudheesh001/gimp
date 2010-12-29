@@ -730,7 +730,7 @@ build_dialog (GimpImageBaseType  basetype,
   cursor = gdk_cursor_new_for_display (gtk_widget_get_display (shape_window),
                                        GDK_HAND2);
   gdk_window_set_cursor (gtk_widget_get_window (shape_window), cursor);
-  gdk_cursor_unref (cursor);
+  g_object_unref (cursor);
 
   g_signal_connect (shape_window, "button-press-event",
                     G_CALLBACK (shape_pressed),
