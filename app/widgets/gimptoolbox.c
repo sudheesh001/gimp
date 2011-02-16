@@ -98,8 +98,7 @@ static void        gimp_toolbox_get_property            (GObject        *object,
                                                          GParamSpec     *pspec);
 static void        gimp_toolbox_size_allocate           (GtkWidget      *widget,
                                                          GtkAllocation  *allocation);
-static void        gimp_toolbox_style_set               (GtkWidget      *widget,
-                                                         GtkStyle       *previous_style);
+static void        gimp_toolbox_style_updated           (GtkWidget      *widget);
 static gboolean    gimp_toolbox_button_press_event      (GtkWidget      *widget,
                                                          GdkEventButton *event);
 static void        gimp_toolbox_drag_leave              (GtkWidget      *widget,
@@ -166,7 +165,7 @@ gimp_toolbox_class_init (GimpToolboxClass *klass)
   object_class->get_property          = gimp_toolbox_get_property;
 
   widget_class->size_allocate         = gimp_toolbox_size_allocate;
-  widget_class->style_set             = gimp_toolbox_style_set;
+  widget_class->style_updated         = gimp_toolbox_style_updated;
   widget_class->button_press_event    = gimp_toolbox_button_press_event;
 
   dock_class->get_description         = gimp_toolbox_get_description;
@@ -306,8 +305,7 @@ gimp_toolbox_constructed (GObject *object)
 
   gimp_toolbox_dnd_init (GIMP_TOOLBOX (toolbox), toolbox->p->vbox);
 
-  gimp_toolbox_style_set (GTK_WIDGET (toolbox),
-                          gtk_widget_get_style (GTK_WIDGET (toolbox)));
+  gimp_dock_invalidate_geometry (GIMP_DOCK (toolbox));
 }
 
 static void
@@ -425,10 +423,9 @@ gimp_toolbox_size_allocate (GtkWidget     *widget,
 }
 
 static void
-gimp_toolbox_style_set (GtkWidget *widget,
-                        GtkStyle  *previous_style)
+gimp_toolbox_style_updated (GtkWidget *widget)
 {
-  GTK_WIDGET_CLASS (parent_class)->style_set (widget, previous_style);
+  GTK_WIDGET_CLASS (parent_class)->style_updated (widget);
 
   gimp_dock_invalidate_geometry (GIMP_DOCK (widget));
 }
