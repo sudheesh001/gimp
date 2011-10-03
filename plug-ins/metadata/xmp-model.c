@@ -519,7 +519,6 @@ parse_set_property (XMPParseContext     *context,
   XMPSchema   *schema = ns_user_data;
   XMPType      xmptype;
   int          i;
-  const gchar *ns_prefix;
   XMPProperty *property;
   GtkTreeIter  iter;
   GtkTreeIter  child_iter;
@@ -535,7 +534,6 @@ parse_set_property (XMPParseContext     *context,
       return;
     }
 
-  ns_prefix = schema->prefix;
   property = NULL;
 
   if (schema->properties != NULL)
@@ -554,7 +552,7 @@ parse_set_property (XMPParseContext     *context,
     {
     case XMP_PTYPE_TEXT:
 #ifdef DEBUG_XMP_MODEL
-      g_print ("\t%s:%s = \"%s\"\n", ns_prefix, name, value[0]);
+      g_print ("\t%s:%s = \"%s\"\n", schema->prefix, name, value[0]);
 #endif
       xmp_model_set_property (xmp_model, XMP_TYPE_TEXT, schema->uri, name, value);
       break;
