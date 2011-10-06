@@ -29,8 +29,6 @@ libexec_PROGRAMS = metadata
 metadata_SOURCES = \
 	metadata.c		\
 	metadata.h		\
-	base64.h		\
-	base64.c		\
 	xmp-model.h		\
 	xmp-model.c		\
 	xmp-parse.h		\
@@ -57,8 +55,6 @@ metadata_SOURCES = \
 noinst_PROGRAMS = xmpdump
 xmpdump_SOURCES = \
 	xmpdump.c	\
-	base64.h	\
-	base64.c	\
 	xmp-schemas.h	\
 	xmp-schemas.c	\
 	xmp-encode.h	\
@@ -87,16 +83,3 @@ LDADD = \
 	$(RT_LIBS)		\
 	$(INTLLIBS)		\
 	$(metadata_RC)
-
-# test program, not built by default
-
-TESTS = testbase64$(EXEEXT)
-
-EXTRA_PROGRAMS = testbase64
-
-testbase64_SOURCES = \
-	base64.h	\
-	base64.c	\
-	testbase64.c	
-
-CLEANFILES = $(EXTRA_PROGRAMS)
