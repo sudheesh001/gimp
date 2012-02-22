@@ -56,7 +56,7 @@ endif
 
 SUBDIRS = \
 	$(script_fu)		\
-	$(pygimp)		\
+##	$(pygimp)		\
 	color-rotate		\
 	file-bmp		\
 	$(file_compressor)	\
@@ -72,12 +72,12 @@ SUBDIRS = \
 	flame			\
 	fractal-explorer	\
 	gfig			\
-	gimpressionist		\
+##	gimpressionist		\
 	gradient-flare		\
 	help			\
 	$(help_browser)		\
-	ifs-compose		\
-	imagemap		\
+##	ifs-compose		\
+##	imagemap		\
 	lighting		\
 	map-object		\
 	maze			\

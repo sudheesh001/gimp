@@ -47,7 +47,7 @@ libexec_PROGRAMS = \
 	alien-map \
 	align-layers \
 	animation-optimize \
-	animation-play \
+##	animation-play \
 	antialias \
 	apply-canvas \
 	blinds \
@@ -75,7 +75,7 @@ libexec_PROGRAMS = \
 	crop-auto \
 	crop-zealous \
 	cubism \
-	curve-bend \
+##	curve-bend \
 	decompose \
 	deinterlace \
 	depth-merge \
