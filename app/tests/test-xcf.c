@@ -62,7 +62,7 @@
 #define GIMP_MAINIMAGE_WIDTH            100
 #define GIMP_MAINIMAGE_HEIGHT           90
 #define GIMP_MAINIMAGE_TYPE             GIMP_RGB
-#define GIMP_MAINIMAGE_PRECISION        GIMP_PRECISION_U8
+#define GIMP_MAINIMAGE_PRECISION        GIMP_PRECISION_U8_GAMMA
 
 #define GIMP_MAINIMAGE_LAYER1_NAME      "layer1"
 #define GIMP_MAINIMAGE_LAYER1_WIDTH     50
@@ -971,7 +971,6 @@ main (int    argc,
   Gimp *gimp;
   int   result;
 
-  g_type_init ();
   g_test_init (&argc, &argv, NULL);
 
   gimp_test_utils_set_gimp2_directory ("GIMP_TESTING_ABS_TOP_SRCDIR",

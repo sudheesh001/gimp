@@ -113,8 +113,7 @@ gimp_tool_preset_editor_constructed (GObject *object)
   GtkWidget            *label;
   GtkWidget            *button;
 
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   preset = editor->priv->tool_preset_model =
     g_object_new (GIMP_TYPE_TOOL_PRESET,
@@ -150,7 +149,7 @@ gimp_tool_preset_editor_constructed (GObject *object)
   gtk_box_pack_start (GTK_BOX (hbox), label, FALSE, FALSE, 0);
   gtk_widget_show (label);
 
-  button = gimp_prop_icon_picker_new (G_OBJECT (preset), "stock-id",
+  button = gimp_prop_icon_picker_new (GIMP_VIEWABLE (preset),
                                       data_editor->context->gimp);
   gtk_box_pack_start (GTK_BOX (hbox), button, FALSE, FALSE, 0);
   gtk_widget_show (button);

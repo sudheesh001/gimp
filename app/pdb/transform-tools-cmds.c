@@ -67,7 +67,9 @@ flip_invoker (GimpProcedure         *procedure,
     {
       gint x, y, width, height;
 
-      success = gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL, TRUE, error);
+      success = gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                           GIMP_PDB_ITEM_CONTENT |
+                                           GIMP_PDB_ITEM_POSITION, error);
 
       if (success &&
           gimp_item_mask_intersect (GIMP_ITEM (drawable), &x, &y, &width, &height))
@@ -139,7 +141,9 @@ perspective_invoker (GimpProcedure         *procedure,
     {
       gint x, y, width, height;
 
-      success = gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL, TRUE, error);
+      success = gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                           GIMP_PDB_ITEM_CONTENT |
+                                           GIMP_PDB_ITEM_POSITION, error);
 
       if (success &&
           gimp_item_mask_intersect (GIMP_ITEM (drawable), &x, &y, &width, &height))
@@ -172,7 +176,7 @@ perspective_invoker (GimpProcedure         *procedure,
               if (! gimp_drawable_transform_affine (drawable, context,
                                                     &matrix,
                                                     GIMP_TRANSFORM_FORWARD,
-                                                    interpolation_type, 3,
+                                                    interpolation_type,
                                                     FALSE, progress))
                 {
                   success = FALSE;
@@ -182,7 +186,7 @@ perspective_invoker (GimpProcedure         *procedure,
             {
               gimp_item_transform (GIMP_ITEM (drawable), context, &matrix,
                                    GIMP_TRANSFORM_FORWARD,
-                                   interpolation, 3,
+                                   interpolation,
                                    FALSE, progress);
             }
 
@@ -222,7 +226,9 @@ rotate_invoker (GimpProcedure         *procedure,
     {
       gint x, y, width, height;
 
-      success = gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL, TRUE, error);
+      success = gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                           GIMP_PDB_ITEM_CONTENT |
+                                           GIMP_PDB_ITEM_POSITION, error);
 
       if (success &&
           gimp_item_mask_intersect (GIMP_ITEM (drawable), &x, &y, &width, &height))
@@ -254,7 +260,7 @@ rotate_invoker (GimpProcedure         *procedure,
               if (! gimp_drawable_transform_affine (drawable, context,
                                                     &matrix,
                                                     GIMP_TRANSFORM_FORWARD,
-                                                    interpolation_type, 3,
+                                                    interpolation_type,
                                                     FALSE, progress))
                 {
                   success = FALSE;
@@ -264,7 +270,7 @@ rotate_invoker (GimpProcedure         *procedure,
             {
               gimp_item_transform (GIMP_ITEM (drawable), context, &matrix,
                                    GIMP_TRANSFORM_FORWARD,
-                                   interpolation, 3,
+                                   interpolation,
                                    FALSE, progress);
             }
 
@@ -310,7 +316,9 @@ scale_invoker (GimpProcedure         *procedure,
     {
       gint x, y, width, height;
 
-      success = (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL, TRUE, error) &&
+      success = (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                            GIMP_PDB_ITEM_CONTENT |
+                                            GIMP_PDB_ITEM_POSITION, error) &&
                  x0 < x1 && y0 < y1);
 
       if (success &&
@@ -343,7 +351,7 @@ scale_invoker (GimpProcedure         *procedure,
               if (! gimp_drawable_transform_affine (drawable, context,
                                                     &matrix,
                                                     GIMP_TRANSFORM_FORWARD,
-                                                    interpolation_type, 3,
+                                                    interpolation_type,
                                                     FALSE, progress))
                 {
                   success = FALSE;
@@ -353,7 +361,7 @@ scale_invoker (GimpProcedure         *procedure,
             {
               gimp_item_transform (GIMP_ITEM (drawable), context, &matrix,
                                    GIMP_TRANSFORM_FORWARD,
-                                   interpolation, 3,
+                                   interpolation,
                                    FALSE, progress);
             }
 
@@ -395,7 +403,9 @@ shear_invoker (GimpProcedure         *procedure,
     {
       gint x, y, width, height;
 
-      success = gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL, TRUE, error);
+      success = gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                           GIMP_PDB_ITEM_CONTENT |
+                                           GIMP_PDB_ITEM_POSITION, error);
 
       if (success &&
           gimp_item_mask_intersect (GIMP_ITEM (drawable), &x, &y, &width, &height))
@@ -427,7 +437,7 @@ shear_invoker (GimpProcedure         *procedure,
               if (! gimp_drawable_transform_affine (drawable, context,
                                                     &matrix,
                                                     GIMP_TRANSFORM_FORWARD,
-                                                    interpolation_type, 3,
+                                                    interpolation_type,
                                                     FALSE, progress))
                 {
                   success = FALSE;
@@ -437,7 +447,7 @@ shear_invoker (GimpProcedure         *procedure,
             {
               gimp_item_transform (GIMP_ITEM (drawable), context, &matrix,
                                    GIMP_TRANSFORM_FORWARD,
-                                   interpolation, 3,
+                                   interpolation,
                                    FALSE, progress);
             }
 
@@ -489,7 +499,9 @@ transform_2d_invoker (GimpProcedure         *procedure,
     {
       gint x, y, width, height;
 
-      success = gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL, TRUE, error);
+      success = gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                           GIMP_PDB_ITEM_CONTENT |
+                                           GIMP_PDB_ITEM_POSITION, error);
 
       if (success &&
           gimp_item_mask_intersect (GIMP_ITEM (drawable), &x, &y, &width, &height))
@@ -515,7 +527,7 @@ transform_2d_invoker (GimpProcedure         *procedure,
             {
               if (! gimp_drawable_transform_affine (drawable, context,
                                                     &matrix, GIMP_TRANSFORM_FORWARD,
-                                                    interpolation_type, 3,
+                                                    interpolation_type,
                                                     FALSE, progress))
                 {
                   success = FALSE;
@@ -525,7 +537,7 @@ transform_2d_invoker (GimpProcedure         *procedure,
             {
               gimp_item_transform (GIMP_ITEM (drawable), context, &matrix,
                                    GIMP_TRANSFORM_FORWARD,
-                                   interpolation, 3,
+                                   interpolation,
                                    FALSE, progress);
             }
 

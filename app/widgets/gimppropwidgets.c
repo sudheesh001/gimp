@@ -73,13 +73,6 @@ static GParamSpec * check_param_spec_w (GObject     *object,
                                         GType         type,
                                         const gchar *strloc);
 
-static gboolean     get_numeric_values (GObject     *object,
-                                        GParamSpec  *param_spec,
-                                        gdouble     *value,
-                                        gdouble     *lower,
-                                        gdouble     *upper,
-                                        const gchar *strloc);
-
 static void         connect_notify     (GObject     *config,
                                         const gchar *property_name,
                                         GCallback    callback,
@@ -494,8 +487,9 @@ gimp_prop_spin_scale_new (GObject     *config,
   if (! param_spec)
     return NULL;
 
-  if (! get_numeric_values (config,
-                            param_spec, &value, &lower, &upper, G_STRFUNC))
+  if (! _gimp_prop_widgets_get_numeric_values (config, param_spec,
+                                               &value, &lower, &upper,
+                                               G_STRFUNC))
     return NULL;
 
   if (! G_IS_PARAM_SPEC_DOUBLE (param_spec))
@@ -515,15 +509,13 @@ gimp_prop_spin_scale_new (GObject     *config,
                                         gspec->ui_minimum, gspec->ui_maximum);
       gimp_spin_scale_set_gamma (GIMP_SPIN_SCALE (scale), gspec->ui_gamma);
     }
-
-  if (GEGL_IS_PARAM_SPEC_INT (param_spec))
+  else if (GEGL_IS_PARAM_SPEC_INT (param_spec))
     {
       GeglParamSpecInt *gspec = GEGL_PARAM_SPEC_INT (param_spec);
       gimp_spin_scale_set_scale_limits (GIMP_SPIN_SCALE (scale),
                                         gspec->ui_minimum, gspec->ui_maximum);
       gimp_spin_scale_set_gamma (GIMP_SPIN_SCALE (scale), gspec->ui_gamma);
     }
-
 
   g_signal_connect (adjustment, "value-changed",
                     G_CALLBACK (gimp_prop_adjustment_callback),
@@ -536,58 +528,51 @@ gimp_prop_spin_scale_new (GObject     *config,
   return scale;
 }
 
-/**
- * gimp_prop_opacity_spin_scale_new:
- * @config:        #GimpConfig object to which property is attached.
- * @property_name: Name of gdouble property
- *
- * Creates a #GimpSpinScale to set and display the value of a
- * gdouble property in a very space-efficient way.
- *
- * Return value:  A new #GimpSpinScale widget.
- *
- * Since GIMP 2.8
- */
-GtkWidget *
-gimp_prop_opacity_spin_scale_new (GObject     *config,
-                                  const gchar *property_name,
-                                  const gchar *label)
+void
+gimp_prop_widget_set_factor (GtkWidget *widget,
+                             gdouble    factor,
+                             gint       digits)
 {
-  GParamSpec *param_spec;
-  GtkObject  *adjustment;
-  GtkWidget  *scale;
-  gdouble     value;
-  gdouble     lower;
-  gdouble     upper;
+  GtkAdjustment *adjustment;
+  gdouble       *factor_store;
+  gdouble        old_factor = 1.0;
+  gdouble        f;
 
-  param_spec = check_param_spec_w (config, property_name,
-                                   G_TYPE_PARAM_DOUBLE, G_STRFUNC);
-  if (! param_spec)
-    return NULL;
+  g_return_if_fail (GTK_IS_SPIN_BUTTON (widget));
+  g_return_if_fail (factor != 0.0);
+  g_return_if_fail (digits >= 0);
 
-  g_object_get (config, property_name, &value, NULL);
+  adjustment = gtk_spin_button_get_adjustment (GTK_SPIN_BUTTON (widget));
 
-  value *= 100.0;
-  lower = G_PARAM_SPEC_DOUBLE (param_spec)->minimum * 100.0;
-  upper = G_PARAM_SPEC_DOUBLE (param_spec)->maximum * 100.0;
+  g_return_if_fail (get_param_spec (G_OBJECT (adjustment)) != NULL);
 
-  adjustment = gtk_adjustment_new (value, lower, upper, 1.0, 10.0, 0.0);
+  factor_store = g_object_get_data (G_OBJECT (adjustment),
+                                    "gimp-prop-adjustment-factor");
+  if (factor_store)
+    {
+      old_factor = *factor_store;
+    }
+  else
+    {
+      factor_store = g_new (gdouble, 1);
+      g_object_set_data_full (G_OBJECT (adjustment),
+                              "gimp-prop-adjustment-factor",
+                              factor_store, (GDestroyNotify) g_free);
+    }
 
-  scale = gimp_spin_scale_new (GTK_ADJUSTMENT (adjustment), label, 1);
+  *factor_store = factor;
 
-  set_param_spec (G_OBJECT (adjustment), scale, param_spec);
-  g_object_set_data (G_OBJECT (adjustment),
-                     "opacity-scale", GINT_TO_POINTER (TRUE));
+  f = factor / old_factor;
 
-  g_signal_connect (adjustment, "value-changed",
-                    G_CALLBACK (gimp_prop_adjustment_callback),
-                    config);
+  gtk_adjustment_configure (adjustment,
+                            f * gtk_adjustment_get_value (adjustment),
+                            f * gtk_adjustment_get_lower (adjustment),
+                            f * gtk_adjustment_get_upper (adjustment),
+                            f * gtk_adjustment_get_step_increment (adjustment),
+                            f * gtk_adjustment_get_page_increment (adjustment),
+                            f * gtk_adjustment_get_page_size (adjustment));
 
-  connect_notify (config, property_name,
-                  G_CALLBACK (gimp_prop_adjustment_notify),
-                  adjustment);
-
-  return scale;
+  gtk_spin_button_set_digits (GTK_SPIN_BUTTON (widget), digits);
 }
 
 static void
@@ -596,6 +581,7 @@ gimp_prop_adjustment_callback (GtkAdjustment *adjustment,
 {
   GParamSpec *param_spec;
   gdouble     value;
+  gdouble    *factor;
 
   param_spec = get_param_spec (G_OBJECT (adjustment));
   if (! param_spec)
@@ -603,48 +589,37 @@ gimp_prop_adjustment_callback (GtkAdjustment *adjustment,
 
   value = gtk_adjustment_get_value (adjustment);
 
+  factor = g_object_get_data (G_OBJECT (adjustment),
+                              "gimp-prop-adjustment-factor");
+  if (factor)
+    value /= *factor;
+
   if (G_IS_PARAM_SPEC_INT (param_spec))
     {
-      g_object_set (config,
-                    param_spec->name, (gint) value,
-                    NULL);
+      g_object_set (config, param_spec->name, (gint) value, NULL);
     }
   else if (G_IS_PARAM_SPEC_UINT (param_spec))
     {
-      g_object_set (config,
-                    param_spec->name, (guint) value,
-                    NULL);
+      g_object_set (config, param_spec->name, (guint) value, NULL);
     }
   else if (G_IS_PARAM_SPEC_LONG (param_spec))
     {
-      g_object_set (config,
-                    param_spec->name, (glong) value,
-                    NULL);
+      g_object_set (config, param_spec->name, (glong) value, NULL);
     }
   else if (G_IS_PARAM_SPEC_ULONG (param_spec))
     {
-      g_object_set (config,
-                    param_spec->name, (gulong) value,
-                    NULL);
+      g_object_set (config, param_spec->name, (gulong) value, NULL);
     }
   else if (G_IS_PARAM_SPEC_INT64 (param_spec))
     {
-      g_object_set (config,
-                    param_spec->name, (gint64) value,
-                    NULL);
+      g_object_set (config, param_spec->name, (gint64) value, NULL);
     }
   else if (G_IS_PARAM_SPEC_UINT64 (param_spec))
     {
-      g_object_set (config,
-                    param_spec->name, (guint64) value,
-                    NULL);
+      g_object_set (config, param_spec->name, (guint64) value, NULL);
     }
   else if (G_IS_PARAM_SPEC_DOUBLE (param_spec))
     {
-      if (GPOINTER_TO_INT (g_object_get_data (G_OBJECT (adjustment),
-                                              "opacity-scale")))
-        value /= 100.0;
-
       g_object_set (config, param_spec->name, value, NULL);
     }
 }
@@ -654,7 +629,8 @@ gimp_prop_adjustment_notify (GObject       *config,
                              GParamSpec    *param_spec,
                              GtkAdjustment *adjustment)
 {
-  gdouble value;
+  gdouble  value;
+  gdouble *factor;
 
   if (G_IS_PARAM_SPEC_INT (param_spec))
     {
@@ -711,10 +687,6 @@ gimp_prop_adjustment_notify (GObject       *config,
   else if (G_IS_PARAM_SPEC_DOUBLE (param_spec))
     {
       g_object_get (config, param_spec->name, &value, NULL);
-
-      if (GPOINTER_TO_INT (g_object_get_data (G_OBJECT (adjustment),
-                                              "opacity-scale")))
-        value *= 100.0;
     }
   else
     {
@@ -722,6 +694,11 @@ gimp_prop_adjustment_notify (GObject       *config,
                  G_STRFUNC, G_PARAM_SPEC_TYPE_NAME (param_spec));
       return;
     }
+
+  factor = g_object_get_data (G_OBJECT (adjustment),
+                              "gimp-prop-adjustment-factor");
+  if (factor)
+    value *= *factor;
 
   if (gtk_adjustment_get_value (adjustment) != value)
     {
@@ -1324,61 +1301,75 @@ static void   gimp_prop_icon_picker_notify   (GObject    *config,
                                               GtkWidget  *picker);
 
 GtkWidget *
-gimp_prop_icon_picker_new (GObject     *config,
-                           const gchar *property_name,
-                           Gimp        *gimp)
+gimp_prop_icon_picker_new (GimpViewable *viewable,
+                           Gimp         *gimp)
 {
-  GParamSpec *param_spec;
-  GtkWidget  *picker;
-  gchar      *value;
-
-  param_spec = check_param_spec_w (config, property_name,
-                                   G_TYPE_PARAM_STRING, G_STRFUNC);
-  if (! param_spec)
-    return NULL;
-
-  g_object_get (config,
-                property_name, &value,
-                NULL);
+  GObject     *object         = G_OBJECT (viewable);
+  GtkWidget   *picker         = NULL;
+  GdkPixbuf   *pixbuf_value   = NULL;
+  gchar       *stock_id_value = NULL;
 
   picker = gimp_icon_picker_new (gimp);
-  gimp_icon_picker_set_stock_id (GIMP_ICON_PICKER (picker), value);
-  g_free (value);
 
-  set_param_spec (G_OBJECT (picker), picker, param_spec);
+  g_object_get (object,
+                "stock-id", &stock_id_value,
+                "icon-pixbuf", &pixbuf_value,
+                NULL);
+
+  gimp_icon_picker_set_stock_id (GIMP_ICON_PICKER (picker), stock_id_value);
+  gimp_icon_picker_set_icon_pixbuf (GIMP_ICON_PICKER (picker), pixbuf_value);
+
+  g_signal_connect (picker, "notify::icon-pixbuf",
+                    G_CALLBACK (gimp_prop_icon_picker_callback),
+                    object);
 
   g_signal_connect (picker, "notify::stock-id",
                     G_CALLBACK (gimp_prop_icon_picker_callback),
-                    config);
+                    object);
 
-  connect_notify (config, property_name,
+  connect_notify (object, "stock-id",
                   G_CALLBACK (gimp_prop_icon_picker_notify),
                   picker);
+
+  connect_notify (object, "icon-pixbuf",
+                  G_CALLBACK (gimp_prop_icon_picker_notify),
+                  picker);
+
+  if (stock_id_value)
+    g_free (stock_id_value);
+  if (pixbuf_value)
+    g_object_unref (pixbuf_value);
 
   return picker;
 }
 
 static void
 gimp_prop_icon_picker_callback (GtkWidget  *picker,
-                                GParamSpec *unuded_param_spec,
+                                GParamSpec *param_spec,
                                 GObject    *config)
 {
-  GParamSpec  *param_spec;
-  const gchar *value;
-
-  param_spec = get_param_spec (G_OBJECT (picker));
-  if (! param_spec)
-    return;
-
-  value = gimp_icon_picker_get_stock_id (GIMP_ICON_PICKER (picker));
-
   g_signal_handlers_block_by_func (config,
                                    gimp_prop_icon_picker_notify,
                                    picker);
 
-  g_object_set (config,
-                param_spec->name, value,
-                NULL);
+  if (! strcmp (param_spec->name, "stock-id"))
+    {
+      const gchar *value = gimp_icon_picker_get_stock_id (GIMP_ICON_PICKER (picker));
+
+      g_object_set (config,
+                    "stock-id", value,
+                    NULL);
+
+    }
+  else if (! strcmp (param_spec->name, "icon-pixbuf"))
+    {
+      GdkPixbuf *value = gimp_icon_picker_get_icon_pixbuf (GIMP_ICON_PICKER (picker));
+
+      g_object_set (config,
+                    "icon-pixbuf", value,
+                    NULL);
+    }
+
 
   g_signal_handlers_unblock_by_func (config,
                                      gimp_prop_icon_picker_notify,
@@ -1390,19 +1381,36 @@ gimp_prop_icon_picker_notify (GObject    *config,
                               GParamSpec *param_spec,
                               GtkWidget  *picker)
 {
-  gchar *value;
-
-  g_object_get (config,
-                param_spec->name, &value,
-                NULL);
-
   g_signal_handlers_block_by_func (picker,
                                    gimp_prop_icon_picker_callback,
                                    config);
 
-  gimp_icon_picker_set_stock_id (GIMP_ICON_PICKER (picker), value);
+  if (!strcmp (param_spec->name, "stock-id"))
+    {
+      gchar *value = NULL;
 
-  g_free (value);
+      g_object_get (config,
+                    "stock-id", &value,
+                    NULL);
+
+      gimp_icon_picker_set_stock_id (GIMP_ICON_PICKER (picker), value);
+
+      if (value)
+        g_free (value);
+    }
+  else if (!strcmp (param_spec->name, "icon-pixbuf"))
+    {
+      GdkPixbuf *value = NULL;
+
+      g_object_get (config,
+                    "icon-pixbuf", &value,
+                    NULL);
+
+      gimp_icon_picker_set_icon_pixbuf (GIMP_ICON_PICKER (picker), value);
+
+      if (value)
+        g_object_unref (value);
+    }
 
   g_signal_handlers_unblock_by_func (picker,
                                      gimp_prop_icon_picker_callback,
@@ -1410,231 +1418,59 @@ gimp_prop_icon_picker_notify (GObject    *config,
 }
 
 
-/***********/
-/*  table  */
-/***********/
+/******************************/
+/*  public utility functions  */
+/******************************/
 
-static void
-gimp_prop_table_chain_toggled (GimpChainButton *chain,
-                               GtkAdjustment   *x_adj)
+gboolean
+_gimp_prop_widgets_get_numeric_values (GObject     *object,
+                                       GParamSpec  *param_spec,
+                                       gdouble     *value,
+                                       gdouble     *lower,
+                                       gdouble     *upper,
+                                       const gchar *strloc)
 {
-  GtkAdjustment *y_adj;
-
-  y_adj = g_object_get_data (G_OBJECT (x_adj), "y-adjustment");
-
-  if (gimp_chain_button_get_active (chain))
+  if (G_IS_PARAM_SPEC_INT (param_spec))
     {
-      GBinding *binding;
+      GParamSpecInt *int_spec = G_PARAM_SPEC_INT (param_spec);
+      gint           int_value;
 
-      binding = g_object_bind_property (x_adj, "value",
-                                        y_adj,   "value",
-                                        G_BINDING_BIDIRECTIONAL);
+      g_object_get (object, param_spec->name, &int_value, NULL);
 
-      g_object_set_data (G_OBJECT (chain), "binding", binding);
+      *value = int_value;
+      *lower = int_spec->minimum;
+      *upper = int_spec->maximum;
+    }
+  else if (G_IS_PARAM_SPEC_UINT (param_spec))
+    {
+      GParamSpecUInt *uint_spec = G_PARAM_SPEC_UINT (param_spec);
+      guint           uint_value;
+
+      g_object_get (object, param_spec->name, &uint_value, NULL);
+
+      *value = uint_value;
+      *lower = uint_spec->minimum;
+      *upper = uint_spec->maximum;
+    }
+  else if (G_IS_PARAM_SPEC_DOUBLE (param_spec))
+    {
+      GParamSpecDouble *double_spec = G_PARAM_SPEC_DOUBLE (param_spec);
+
+      g_object_get (object, param_spec->name, value, NULL);
+
+      *lower = double_spec->minimum;
+      *upper = double_spec->maximum;
     }
   else
     {
-      GBinding *binding;
-
-      binding = g_object_get_data (G_OBJECT (chain), "binding");
-
-      g_object_unref (binding);
-      g_object_set_data (G_OBJECT (chain), "binding", NULL);
-    }
-}
-
-GtkWidget *
-gimp_prop_table_new (GObject              *config,
-                     GType                 owner_type,
-                     GimpContext          *context,
-                     GimpCreatePickerFunc  create_picker_func,
-                     gpointer              picker_creator)
-{
-  GtkWidget     *table;
-  GtkSizeGroup  *size_group;
-  GParamSpec   **param_specs;
-  guint          n_param_specs;
-  gint           i;
-  gint           row = 0;
-  GtkAdjustment *last_x_adj = NULL;
-  gint           last_x_row = 0;
-
-  g_return_val_if_fail (G_IS_OBJECT (config), NULL);
-  g_return_val_if_fail (context == NULL || GIMP_IS_CONTEXT (context), NULL);
-
-  param_specs = g_object_class_list_properties (G_OBJECT_GET_CLASS (config),
-                                                &n_param_specs);
-
-  size_group = gtk_size_group_new (GTK_SIZE_GROUP_HORIZONTAL);
-
-  table = gtk_table_new (3, 1, FALSE);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 4);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 2);
-
-  for (i = 0; i < n_param_specs; i++)
-    {
-      GParamSpec  *pspec  = param_specs[i];
-      GtkWidget   *widget = NULL;
-      const gchar *label  = NULL;
-
-      /*  ignore properties of parent classes of owner_type  */
-      if (! g_type_is_a (pspec->owner_type, owner_type))
-        continue;
-
-      if (G_IS_PARAM_SPEC_STRING (pspec))
-        {
-          static GQuark multiline_quark = 0;
-
-          if (! multiline_quark)
-            multiline_quark = g_quark_from_static_string ("multiline");
-
-          if (GIMP_IS_PARAM_SPEC_CONFIG_PATH (pspec))
-            {
-              widget = gimp_prop_file_chooser_button_new (config,
-                                                          pspec->name,
-                                                          g_param_spec_get_nick (pspec),
-                                                          GTK_FILE_CHOOSER_ACTION_OPEN);
-            }
-          else if (g_param_spec_get_qdata (pspec, multiline_quark))
-            {
-              GtkTextBuffer *buffer;
-              GtkWidget     *view;
-
-              buffer = gimp_prop_text_buffer_new (config, pspec->name, -1);
-              view = gtk_text_view_new_with_buffer (buffer);
-
-              widget = gtk_scrolled_window_new (NULL, NULL);
-              gtk_scrolled_window_set_shadow_type (GTK_SCROLLED_WINDOW (widget),
-                                                   GTK_SHADOW_IN);
-              gtk_container_add (GTK_CONTAINER (widget), view);
-              gtk_widget_show (view);
-            }
-          else
-            {
-              widget = gimp_prop_entry_new (config, pspec->name, -1);
-            }
-
-          label  = g_param_spec_get_nick (pspec);
-        }
-      else if (G_IS_PARAM_SPEC_BOOLEAN (pspec))
-        {
-          widget = gimp_prop_check_button_new (config, pspec->name,
-                                               g_param_spec_get_nick (pspec));
-        }
-      else if (G_IS_PARAM_SPEC_ENUM (pspec))
-        {
-          widget = gimp_prop_enum_combo_box_new (config, pspec->name, 0, 0);
-          label = g_param_spec_get_nick (pspec);
-        }
-      else if (G_IS_PARAM_SPEC_INT (pspec)   ||
-               G_IS_PARAM_SPEC_UINT (pspec)  ||
-               G_IS_PARAM_SPEC_FLOAT (pspec) ||
-               G_IS_PARAM_SPEC_DOUBLE (pspec))
-        {
-          GtkAdjustment *adj;
-          gint           digits = (G_IS_PARAM_SPEC_FLOAT (pspec) ||
-                                   G_IS_PARAM_SPEC_DOUBLE (pspec)) ? 2 : 0;
-
-          widget = gimp_prop_spin_scale_new (config, pspec->name,
-                                             g_param_spec_get_nick (pspec),
-                                             1.0, 1.0, digits);
-
-          adj = gtk_spin_button_get_adjustment (GTK_SPIN_BUTTON (widget));
-
-          if (g_str_has_suffix (pspec->name, "x") ||
-              g_str_has_suffix (pspec->name, "width"))
-            {
-              last_x_adj = adj;
-              last_x_row = row;
-            }
-          else if ((g_str_has_suffix (pspec->name, "y") ||
-                    g_str_has_suffix (pspec->name, "height")) &&
-                   last_x_adj != NULL &&
-                   last_x_row == row - 1)
-            {
-              GtkWidget *chain = gimp_chain_button_new (GIMP_CHAIN_RIGHT);
-
-              gtk_table_attach (GTK_TABLE (table), chain,
-                                3, 4, last_x_row, row + 1,
-                                GTK_SHRINK | GTK_FILL, GTK_SHRINK | GTK_FILL,
-                                0, 0);
-              gtk_widget_show (chain);
-
-              if (gtk_adjustment_get_value (last_x_adj) ==
-                  gtk_adjustment_get_value (adj))
-                {
-                  GBinding *binding;
-
-                  gimp_chain_button_set_active (GIMP_CHAIN_BUTTON (chain), TRUE);
-
-                  binding = g_object_bind_property (last_x_adj, "value",
-                                                    adj,        "value",
-                                                    G_BINDING_BIDIRECTIONAL);
-
-                  g_object_set_data (G_OBJECT (chain), "binding", binding);
-                }
-
-              g_signal_connect (chain, "toggled",
-                                G_CALLBACK (gimp_prop_table_chain_toggled),
-                                last_x_adj);
-
-              g_object_set_data (G_OBJECT (last_x_adj), "y-adjustment", adj);
-            }
-        }
-      else if (GIMP_IS_PARAM_SPEC_RGB (pspec))
-        {
-          GtkWidget *button;
-
-          widget = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 4);
-
-          button = gimp_prop_color_button_new (config, pspec->name,
-                                               g_param_spec_get_nick (pspec),
-                                               128, 24,
-                                               GIMP_COLOR_AREA_SMALL_CHECKS);
-          gimp_color_button_set_update (GIMP_COLOR_BUTTON (button), TRUE);
-          gimp_color_panel_set_context (GIMP_COLOR_PANEL (button), context);
-          gtk_box_pack_start (GTK_BOX (widget), button, TRUE, TRUE, 0);
-          gtk_widget_show (button);
-
-          button = create_picker_func (picker_creator,
-                                       pspec->name,
-                                       GIMP_STOCK_COLOR_PICKER_GRAY,
-                                       _("Pick color from image"));
-          gtk_box_pack_start (GTK_BOX (widget), button, FALSE, FALSE, 0);
-          gtk_widget_show (button);
-
-          label = g_param_spec_get_nick (pspec);
-        }
-      else
-        {
-          g_warning ("%s: not supported: %s (%s)\n", G_STRFUNC,
-                     g_type_name (G_TYPE_FROM_INSTANCE (pspec)), pspec->name);
-        }
-
-      if (widget)
-        {
-          if (label)
-            {
-              gimp_table_attach_aligned (GTK_TABLE (table), 0, row,
-                                         label, 0.0, 0.5,
-                                         widget, 2, FALSE);
-            }
-          else
-            {
-              gtk_table_attach_defaults (GTK_TABLE (table), widget,
-                                         0, 3, row, row + 1);
-              gtk_widget_show (widget);
-            }
-
-          row++;
-        }
+      g_warning ("%s: property '%s' of %s is not numeric",
+                 strloc,
+                 param_spec->name,
+                 g_type_name (G_TYPE_FROM_INSTANCE (object)));
+      return FALSE;
     }
 
-  g_object_unref (size_group);
-
-  g_free (param_specs);
-
-  return table;
+  return TRUE;
 }
 
 
@@ -1745,57 +1581,6 @@ check_param_spec_w (GObject     *object,
     }
 
   return param_spec;
-}
-
-static gboolean
-get_numeric_values (GObject     *object,
-                    GParamSpec  *param_spec,
-                    gdouble     *value,
-                    gdouble     *lower,
-                    gdouble     *upper,
-                    const gchar *strloc)
-{
-  if (G_IS_PARAM_SPEC_INT (param_spec))
-    {
-      GParamSpecInt *int_spec = G_PARAM_SPEC_INT (param_spec);
-      gint           int_value;
-
-      g_object_get (object, param_spec->name, &int_value, NULL);
-
-      *value = int_value;
-      *lower = int_spec->minimum;
-      *upper = int_spec->maximum;
-    }
-  else if (G_IS_PARAM_SPEC_UINT (param_spec))
-    {
-      GParamSpecUInt *uint_spec = G_PARAM_SPEC_UINT (param_spec);
-      guint           uint_value;
-
-      g_object_get (object, param_spec->name, &uint_value, NULL);
-
-      *value = uint_value;
-      *lower = uint_spec->minimum;
-      *upper = uint_spec->maximum;
-    }
-  else if (G_IS_PARAM_SPEC_DOUBLE (param_spec))
-    {
-      GParamSpecDouble *double_spec = G_PARAM_SPEC_DOUBLE (param_spec);
-
-      g_object_get (object, param_spec->name, value, NULL);
-
-      *lower = double_spec->minimum;
-      *upper = double_spec->maximum;
-    }
-  else
-    {
-      g_warning ("%s: property '%s' of %s is not numeric",
-                 strloc,
-                 param_spec->name,
-                 g_type_name (G_TYPE_FROM_INSTANCE (object)));
-      return FALSE;
-    }
-
-  return TRUE;
 }
 
 static void

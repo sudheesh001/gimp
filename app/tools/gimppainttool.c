@@ -150,8 +150,7 @@ gimp_paint_tool_constructed (GObject *object)
   GimpPaintOptions *options    = GIMP_PAINT_TOOL_GET_OPTIONS (tool);
   GimpPaintInfo    *paint_info;
 
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   g_assert (GIMP_IS_TOOL_INFO (tool->tool_info));
   g_assert (GIMP_IS_PAINT_INFO (tool->tool_info->paint_info));
@@ -267,6 +266,13 @@ gimp_paint_tool_button_press (GimpTool            *tool,
       return;
     }
 
+  if (! gimp_item_is_visible (GIMP_ITEM (drawable)))
+    {
+      gimp_tool_message_literal (tool, display,
+                                 _("The active layer is not visible."));
+      return;
+    }
+
   curr_coords = *coords;
 
   gimp_item_get_offset (GIMP_ITEM (drawable), &off_x, &off_y);
@@ -300,13 +306,16 @@ gimp_paint_tool_button_press (GimpTool            *tool,
 
   if ((display != tool->display) || ! paint_tool->draw_line)
     {
-      /*  if this is a new image, reinit the core vals  */
+      /* if this is a new display, resest the "last stroke's endpoint"
+       * because there is none
+       */
+      if (display != tool->display)
+        core->start_coords = core->cur_coords;
 
-      core->start_coords = core->cur_coords;
-      core->last_coords  = core->cur_coords;
+      core->last_coords = core->cur_coords;
 
-      core->distance     = 0.0;
-      core->pixel_dist   = 0.0;
+      core->distance    = 0.0;
+      core->pixel_dist  = 0.0;
     }
   else if (paint_tool->draw_line)
     {
@@ -315,8 +324,6 @@ gimp_paint_tool_button_press (GimpTool            *tool,
       /*  If shift is down and this is not the first paint
        *  stroke, then draw a line from the last coords to the pointer
        */
-      core->start_coords = core->last_coords;
-
       gimp_paint_core_round_line (core, paint_options, constrain);
     }
 
@@ -523,7 +530,8 @@ gimp_paint_tool_cursor_update (GimpTool         *tool,
       GimpDrawable *drawable = gimp_image_get_active_drawable (image);
 
       if (gimp_viewable_get_children (GIMP_VIEWABLE (drawable)) ||
-          gimp_item_is_content_locked (GIMP_ITEM (drawable)))
+          gimp_item_is_content_locked (GIMP_ITEM (drawable))    ||
+          ! gimp_item_is_visible (GIMP_ITEM (drawable)))
         {
           modifier        = GIMP_CURSOR_MODIFIER_BAD;
           toggle_modifier = GIMP_CURSOR_MODIFIER_BAD;

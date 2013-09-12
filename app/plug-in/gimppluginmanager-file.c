@@ -141,7 +141,8 @@ gimp_plug_in_manager_register_save_handler (GimpPlugInManager *manager,
       if (! g_slist_find (manager->save_procs, file_proc))
         manager->save_procs = g_slist_prepend (manager->save_procs, file_proc);
     }
-  else
+
+  if (file_procedure_in_group (file_proc, FILE_PROCEDURE_GROUP_EXPORT))
     {
       if (! g_slist_find (manager->export_procs, file_proc))
         manager->export_procs = g_slist_prepend (manager->export_procs, file_proc);
@@ -173,6 +174,31 @@ gimp_plug_in_manager_register_mime_type (GimpPlugInManager *manager,
     return FALSE;
 
   gimp_plug_in_procedure_set_mime_type (file_proc, mime_type);
+
+  return TRUE;
+}
+
+gboolean
+gimp_plug_in_manager_register_handles_uri (GimpPlugInManager *manager,
+                                           const gchar       *name)
+{
+  GimpPlugInProcedure *file_proc;
+  GSList              *list;
+
+  g_return_val_if_fail (GIMP_IS_PLUG_IN_MANAGER (manager), FALSE);
+  g_return_val_if_fail (name != NULL, FALSE);
+
+  if (manager->current_plug_in && manager->current_plug_in->plug_in_def)
+    list = manager->current_plug_in->plug_in_def->procedures;
+  else
+    list = manager->plug_in_procedures;
+
+  file_proc = gimp_plug_in_procedure_find (list, name);
+
+  if (! file_proc)
+    return FALSE;
+
+  gimp_plug_in_procedure_set_handles_uri (file_proc);
 
   return TRUE;
 }

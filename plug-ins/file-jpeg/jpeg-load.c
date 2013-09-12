@@ -31,7 +31,7 @@
 #endif /* HAVE_LIBEXIF */
 
 #ifdef HAVE_LCMS
-#include <lcms.h>
+#include <lcms2.h>
 #endif
 
 #include <libgimp/gimp.h>
@@ -66,11 +66,8 @@ static void      jpeg_load_cmyk_to_rgb      (guchar   *buf,
                                              glong     pixels,
                                              gpointer  transform);
 
-
-GimpDrawable    *drawable_global;
 gint32 volatile  preview_image_ID;
 gint32           preview_layer_ID;
-
 
 gint32
 load_image (const gchar  *filename,
@@ -78,8 +75,6 @@ load_image (const gchar  *filename,
             gboolean      preview,
             GError      **error)
 {
-  GimpPixelRgn     pixel_rgn;
-  GimpDrawable    *drawable;
   gint32 volatile  image_ID;
   gint32           layer_ID;
   struct jpeg_decompress_struct cinfo;
@@ -88,8 +83,10 @@ load_image (const gchar  *filename,
   FILE            *infile;
   guchar          *buf;
   guchar         **rowbuf;
-  gint             image_type;
-  gint             layer_type;
+  GimpImageBaseType image_type;
+  GimpImageType    layer_type;
+  GeglBuffer      *buffer = NULL;
+  const Babl      *format;
   gint             tile_height;
   gint             scanlines;
   gint             i, start, end;
@@ -140,6 +137,9 @@ load_image (const gchar  *filename,
 
       if (preview)
         destroy_preview ();
+
+      if (buffer)
+        g_object_unref (buffer);
 
       return -1;
     }
@@ -235,8 +235,10 @@ load_image (const gchar  *filename,
     }
   else
     {
-      image_ID = gimp_image_new (cinfo.output_width, cinfo.output_height,
-                                 image_type);
+      image_ID = gimp_image_new_with_precision (cinfo.output_width,
+                                                cinfo.output_height,
+                                                image_type,
+                                                GIMP_PRECISION_U8_GAMMA);
 
       gimp_image_undo_disable (image_ID);
       gimp_image_set_filename (image_ID, filename);
@@ -257,10 +259,6 @@ load_image (const gchar  *filename,
                                  cinfo.output_height,
                                  layer_type, 100, GIMP_NORMAL_MODE);
     }
-
-  drawable_global = drawable = gimp_drawable_get (layer_ID);
-  gimp_pixel_rgn_init (&pixel_rgn, drawable, 0, 0,
-                       drawable->width, drawable->height, TRUE, FALSE);
 
   if (! preview)
     {
@@ -417,6 +415,10 @@ load_image (const gchar  *filename,
   /* Here we use the library's state variable cinfo.output_scanline as the
    * loop counter, so that we don't have to keep track ourselves.
    */
+
+  buffer = gimp_drawable_get_buffer (layer_ID);
+  format = babl_format (image_type == GIMP_RGB ? "R'G'B' u8" : "Y' u8");
+
   while (cinfo.output_scanline < cinfo.output_height)
     {
       start = cinfo.output_scanline;
@@ -429,11 +431,15 @@ load_image (const gchar  *filename,
         jpeg_read_scanlines (&cinfo, (JSAMPARRAY) &rowbuf[i], 1);
 
       if (cinfo.out_color_space == JCS_CMYK)
-        jpeg_load_cmyk_to_rgb (buf, drawable->width * scanlines,
+        jpeg_load_cmyk_to_rgb (buf, cinfo.output_width * scanlines,
                                cmyk_transform);
 
-      gimp_pixel_rgn_set_rect (&pixel_rgn, buf,
-                               0, start, drawable->width, scanlines);
+      gegl_buffer_set (buffer,
+                       GEGL_RECTANGLE (0, start, cinfo.output_width, scanlines),
+                       0,
+                       format,
+                       buf,
+                       GEGL_AUTO_ROWSTRIDE);
 
       if (! preview && (cinfo.output_scanline % 32) == 0)
         gimp_progress_update ((gdouble) cinfo.output_scanline /
@@ -457,6 +463,8 @@ load_image (const gchar  *filename,
   /* This is an important step since it will release a good deal of memory. */
   jpeg_destroy_decompress (&cinfo);
 
+  g_object_unref (buffer);
+
   /* free up the temporary buffers */
   g_free (rowbuf);
   g_free (buf);
@@ -477,7 +485,6 @@ load_image (const gchar  *filename,
   if (! preview)
     {
       gimp_progress_update (1.0);
-      gimp_drawable_detach (drawable);
     }
 
   gimp_image_insert_layer (image_ID, layer_ID, -1, 0);
@@ -661,15 +668,14 @@ load_thumbnail_image (const gchar   *filename,
 {
   gint32 volatile  image_ID;
   ExifData        *exif_data;
-  GimpPixelRgn     pixel_rgn;
-  GimpDrawable    *drawable;
   gint32           layer_ID;
   struct jpeg_decompress_struct cinfo;
   struct my_error_mgr           jerr;
   guchar          *buf;
   guchar         **rowbuf;
-  gint             image_type;
-  gint             layer_type;
+  GimpImageBaseType image_type;
+  GimpImageType    layer_type;
+  GeglBuffer      *buffer = NULL;
   gint             tile_height;
   gint             scanlines;
   gint             i, start, end;
@@ -709,6 +715,9 @@ load_thumbnail_image (const gchar   *filename,
           exif_data_unref (exif_data);
           exif_data = NULL;
         }
+
+      if (buffer)
+        g_object_unref (buffer);
 
       return -1;
     }
@@ -822,16 +831,14 @@ load_thumbnail_image (const gchar   *filename,
                              cinfo.output_height,
                              layer_type, 100, GIMP_NORMAL_MODE);
 
-  drawable_global = drawable = gimp_drawable_get (layer_ID);
-  gimp_pixel_rgn_init (&pixel_rgn, drawable, 0, 0,
-                       drawable->width, drawable->height, TRUE, FALSE);
-
   /* Step 6: while (scan lines remain to be read) */
   /*           jpeg_read_scanlines(...); */
 
   /* Here we use the library's state variable cinfo.output_scanline as the
    * loop counter, so that we don't have to keep track ourselves.
    */
+  buffer = gimp_drawable_get_buffer (layer_ID);
+
   while (cinfo.output_scanline < cinfo.output_height)
     {
       start = cinfo.output_scanline;
@@ -843,10 +850,14 @@ load_thumbnail_image (const gchar   *filename,
         jpeg_read_scanlines (&cinfo, (JSAMPARRAY) &rowbuf[i], 1);
 
       if (cinfo.out_color_space == JCS_CMYK)
-        jpeg_load_cmyk_to_rgb (buf, drawable->width * scanlines, NULL);
+        jpeg_load_cmyk_to_rgb (buf, cinfo.output_width * scanlines, NULL);
 
-      gimp_pixel_rgn_set_rect (&pixel_rgn, buf,
-                               0, start, drawable->width, scanlines);
+      gegl_buffer_set (buffer,
+                       GEGL_RECTANGLE (0, start, cinfo.output_width, scanlines),
+                       0,
+                       NULL,
+                       buf,
+                       GEGL_AUTO_ROWSTRIDE);
 
       gimp_progress_update ((gdouble) cinfo.output_scanline /
                             (gdouble) cinfo.output_height);
@@ -865,6 +876,8 @@ load_thumbnail_image (const gchar   *filename,
    * of memory.
    */
   jpeg_destroy_decompress (&cinfo);
+
+  g_object_unref (buffer);
 
   /* free up the temporary buffers */
   g_free (rowbuf);
@@ -969,7 +982,7 @@ jpeg_load_cmyk_transform (guint8 *profile_data,
   GimpColorConfig *config       = gimp_get_color_configuration ();
   cmsHPROFILE      cmyk_profile = NULL;
   cmsHPROFILE      rgb_profile  = NULL;
-  DWORD            flags        = 0;
+  cmsUInt32Number  flags        = 0;
   cmsHTRANSFORM    transform;
 
   /*  try to load the embedded CMYK profile  */
@@ -979,7 +992,7 @@ jpeg_load_cmyk_transform (guint8 *profile_data,
 
       if (cmyk_profile)
         {
-          if (! cmsGetColorSpace (cmyk_profile) == icSigCmykData)
+          if (! cmsGetColorSpace (cmyk_profile) == cmsSigCmykData)
             {
               cmsCloseProfile (cmyk_profile);
               cmyk_profile = NULL;
@@ -992,7 +1005,7 @@ jpeg_load_cmyk_transform (guint8 *profile_data,
     {
       cmyk_profile = cmsOpenProfileFromFile (config->cmyk_profile, "r");
 
-      if (cmyk_profile && ! cmsGetColorSpace (cmyk_profile) == icSigCmykData)
+      if (cmyk_profile && ! cmsGetColorSpace (cmyk_profile) == cmsSigCmykData)
         {
           cmsCloseProfile (cmyk_profile);
           cmyk_profile = NULL;
@@ -1011,7 +1024,7 @@ jpeg_load_cmyk_transform (guint8 *profile_data,
     {
       rgb_profile = cmsOpenProfileFromFile (config->rgb_profile, "r");
 
-      if (rgb_profile && ! cmsGetColorSpace (rgb_profile) == icSigRgbData)
+      if (rgb_profile && ! cmsGetColorSpace (rgb_profile) == cmsSigRgbData)
         {
           cmsCloseProfile (rgb_profile);
           rgb_profile = NULL;

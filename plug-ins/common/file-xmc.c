@@ -78,8 +78,6 @@
 #define LOAD_PROC              "file-xmc-load"
 #define LOAD_THUMB_PROC        "file-xmc-load-thumb"
 #define SAVE_PROC              "file-xmc-save"
-/* save without file extension "xmc" */
-#define SAVE_PROC2             "file-xmc-save2"
 
 #define PLUG_IN_BINARY         "file-xmc"
 #define PLUG_IN_ROLE           "gimp-file-xmc"
@@ -362,26 +360,20 @@ query (void)
 
   gimp_register_thumbnail_loader (LOAD_PROC, LOAD_THUMB_PROC);
 
-#define GIMP_INSTALL_SAVE_PROC(mProc, mAdd) \
-        gimp_install_procedure ((mProc),\
-        "Saves files of X11 cursor file",\
-        "This plug-in saves X11 Mouse Cursor (XMC) files"\
-        #mAdd,\
-        "Takeshi Matsuyama <tksmashiw@gmail.com>",\
-        "Takeshi Matsuyama",\
-        "26 May 2009",\
-        N_("X11 Mouse Cursor"),\
-        "RGBA",\
-        GIMP_PLUGIN,\
-        G_N_ELEMENTS (save_args), 0,\
-        save_args, NULL)
-
-  GIMP_INSTALL_SAVE_PROC(SAVE_PROC, .);
-  GIMP_INSTALL_SAVE_PROC(SAVE_PROC2, \nwithout file extension.);
+  gimp_install_procedure (SAVE_PROC,
+                          "Saves files of X11 cursor file",
+                          "This plug-in saves X11 Mouse Cursor (XMC) files",
+                          "Takeshi Matsuyama <tksmashiw@gmail.com>",
+                          "Takeshi Matsuyama",
+                          "26 May 2009",
+                          N_("X11 Mouse Cursor"),
+                          "RGBA",
+                          GIMP_PLUGIN,
+                          G_N_ELEMENTS (save_args), 0,
+                          save_args, NULL);
 
   gimp_register_file_handler_mime (SAVE_PROC, XCURSOR_MIME_TYPE);
   gimp_register_save_handler (SAVE_PROC, XCURSOR_EXTENSION, "");
-  gimp_register_file_handler_mime (SAVE_PROC2, XCURSOR_MIME_TYPE);
 }
 
 /*
@@ -467,7 +459,7 @@ run (const gchar      *name,
           status = GIMP_PDB_EXECUTION_ERROR;
         }
     }
-  else if (strcmp (name, SAVE_PROC)  == 0 || strcmp (name, SAVE_PROC2) == 0)
+  else if (strcmp (name, SAVE_PROC)  == 0)
     {
       DM_XMC("run: save %s\n", name);
       run_mode    = param[0].data.d_int32;
@@ -1436,7 +1428,7 @@ save_image (const gchar *filename,
   /* temporary buffer which store pixel data (guchar * bpp = guint32) */
   guint32 pixelbuf[SQR(MAX_SAVE_DIMENSION)];
 
-  /* This will be used in set_size_and_delay fucntion later.
+  /* This will be used in set_size_and_delay function later.
      To define this in that function is easy to read but place here to
      reduce overheads. */
   re = g_regex_new ("[(][ ]*(\\d+)[ ]*(px|ms)[ ]*[)]",
@@ -1822,7 +1814,7 @@ premultiply_alpha (guint32 pixel)
 }
 
 /* set comments to cursor from xmcparas.comments. */
-/* don't forget to XcursorCommentsDestory returned pointer later. */
+/* don't forget to XcursorCommentsDestroy returned pointer later. */
 static XcursorComments *
 set_cursor_comments (void)
 {

@@ -198,8 +198,7 @@ gimp_ui_manager_constructed (GObject *object)
 {
   GimpUIManager *manager = GIMP_UI_MANAGER (object);
 
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   if (manager->name)
     {
@@ -1253,10 +1252,8 @@ find_widget_under_pointer (GdkWindow *window,
     }
 
   /* We return (x, y) relative to the allocation of event_widget. */
-  if (x)
-    *x = child_loc.x;
-  if (y)
-    *y = child_loc.y;
+  *x = child_loc.x;
+  *y = child_loc.y;
 
   return event_widget;
 }

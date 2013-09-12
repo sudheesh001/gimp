@@ -22,18 +22,18 @@
 #include "gimpobject.h"
 
 
-typedef struct _GimpProjectionIdleRender GimpProjectionIdleRender;
+typedef struct _GimpProjectionChunkRender GimpProjectionChunkRender;
 
-struct _GimpProjectionIdleRender
+struct _GimpProjectionChunkRender
 {
-  gint    width;
-  gint    height;
-  gint    x;
-  gint    y;
-  gint    base_x;
-  gint    base_y;
-  guint   idle_id;
-  GSList *update_areas;   /*  flushed update areas */
+  gboolean running;
+  gint     width;
+  gint     height;
+  gint     x;
+  gint     y;
+  gint     base_x;
+  gint     base_y;
+  GSList  *update_areas;   /*  flushed update areas */
 };
 
 
@@ -50,21 +50,18 @@ typedef struct _GimpProjectionClass GimpProjectionClass;
 
 struct _GimpProjection
 {
-  GimpObject                parent_instance;
+  GimpObject                 parent_instance;
 
-  GimpProjectable          *projectable;
+  GimpProjectable           *projectable;
 
-  TilePyramid              *pyramid;
-  GeglBuffer               *buffer;
+  GeglBuffer                *buffer;
+  gpointer                   validate_handler;
 
-  GeglNode                 *graph;
-  GeglNode                 *sink_node;
-  GeglProcessor            *processor;
+  GSList                    *update_areas;
+  GimpProjectionChunkRender  chunk_render;
+  guint                      chunk_render_idle_id;
 
-  GSList                   *update_areas;
-  GimpProjectionIdleRender  idle_render;
-
-  gboolean                  invalidate_preview;
+  gboolean                   invalidate_preview;
 };
 
 struct _GimpProjectionClass
@@ -82,25 +79,16 @@ struct _GimpProjectionClass
 
 GType            gimp_projection_get_type         (void) G_GNUC_CONST;
 
-GimpProjection * gimp_projection_new              (GimpProjectable      *projectable);
+GimpProjection * gimp_projection_new              (GimpProjectable   *projectable);
 
-GeglNode       * gimp_projection_get_sink_node    (GimpProjection       *proj);
+void             gimp_projection_flush            (GimpProjection    *proj);
+void             gimp_projection_flush_now        (GimpProjection    *proj);
+void             gimp_projection_finish_draw      (GimpProjection    *proj);
 
-TileManager    * gimp_projection_get_tiles_at_level
-                                                  (GimpProjection       *proj,
-                                                   gint                  level,
-                                                   gboolean             *is_premult);
-gint             gimp_projection_get_level        (GimpProjection       *proj,
-                                                   gdouble               scale_x,
-                                                   gdouble               scale_y);
-
-void             gimp_projection_flush            (GimpProjection       *proj);
-void             gimp_projection_flush_now        (GimpProjection       *proj);
-void             gimp_projection_finish_draw      (GimpProjection       *proj);
-
-gint64           gimp_projection_estimate_memsize (GimpImageBaseType     type,
-                                                   gint                  width,
-                                                   gint                  height);
+gint64           gimp_projection_estimate_memsize (GimpImageBaseType  type,
+                                                   GimpPrecision      precision,
+                                                   gint               width,
+                                                   gint               height);
 
 
 #endif /*  __GIMP_PROJECTION_H__  */

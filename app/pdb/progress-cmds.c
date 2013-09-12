@@ -318,7 +318,7 @@ register_progress_procs (GimpPDB *pdb)
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_display_id ("gdisplay",
                                                            "gdisplay",
-                                                           "GimpDisplay to update progressbar in, or -1 for a seperate window",
+                                                           "GimpDisplay to update progressbar in, or -1 for a separate window",
                                                            pdb->gimp, TRUE,
                                                            GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
@@ -373,7 +373,7 @@ register_progress_procs (GimpPDB *pdb)
   gimp_procedure_set_static_strings (procedure,
                                      "gimp-progress-set-text",
                                      "Changes the text in the progress bar for the current plug-in.",
-                                     "This function allows to change the text in the progress bar for the current plug-in. Unlike 'gimp-progress-init' it does not change the displayed value.",
+                                     "This function changes the text in the progress bar for the current plug-in. Unlike 'gimp-progress-init' it does not change the displayed value.",
                                      "Sven Neumann <sven@gimp.org>",
                                      "Sven Neumann",
                                      "2005",

@@ -1,16 +1,14 @@
 ## Process this file with automake to produce Makefile.in
 
 AM_CPPFLAGS = \
-	-DG_LOG_DOMAIN=\"Gimp-GEGL\"
-
-INCLUDES = \
-	-I$(top_builddir)	\
-	-I$(top_srcdir)		\
-	-I$(top_builddir)/app	\
-	-I$(top_srcdir)/app	\
-	$(CAIRO_CFLAGS)		\
-	$(GEGL_CFLAGS)		\
-	$(GDK_PIXBUF_CFLAGS)	\
+	-DG_LOG_DOMAIN=\"Gimp-GEGL\"	\
+	-I$(top_builddir)		\
+	-I$(top_srcdir)			\
+	-I$(top_builddir)/app		\
+	-I$(top_srcdir)/app		\
+	$(CAIRO_CFLAGS)			\
+	$(GEGL_CFLAGS)			\
+	$(GDK_PIXBUF_CFLAGS)		\
 	-I$(includedir)
 
 noinst_LIBRARIES = libappgegl.a
@@ -24,10 +22,16 @@ libappgegl_a_sources = \
 	gimp-babl-compat.h		\
 	gimp-gegl.c			\
 	gimp-gegl.h			\
+	gimp-gegl-apply-operation.c	\
+	gimp-gegl-apply-operation.h	\
 	gimp-gegl-config-proxy.c	\
 	gimp-gegl-config-proxy.h	\
 	gimp-gegl-loops.c		\
 	gimp-gegl-loops.h		\
+	gimp-gegl-mask.c		\
+	gimp-gegl-mask.h		\
+	gimp-gegl-mask-combine.c	\
+	gimp-gegl-mask-combine.h	\
 	gimp-gegl-nodes.c		\
 	gimp-gegl-nodes.h		\
 	gimp-gegl-tile-compat.c		\
@@ -36,8 +40,8 @@ libappgegl_a_sources = \
 	gimp-gegl-utils.h		\
 	gimpapplicator.c		\
 	gimpapplicator.h		\
-	gimptilebackendtilemanager.c	\
-	gimptilebackendtilemanager.h
+	gimptilehandlerprojection.c	\
+	gimptilehandlerprojection.h
 
 libappgegl_a_built_sources = gimp-gegl-enums.c
 

@@ -59,8 +59,9 @@
 #include "gimpdrawtool.h"
 
 
-#define DRAW_TIMEOUT 4
-#define USE_TIMEOUT  1
+#define DRAW_TIMEOUT              4
+#define USE_TIMEOUT               1
+#define MINIMUM_DRAW_INTERVAL 50000 /* 50000 microseconds == 20 fps */
 
 
 static void          gimp_draw_tool_dispose      (GObject          *object);
@@ -179,6 +180,12 @@ gimp_draw_tool_control (GimpTool       *tool,
 static gboolean
 gimp_draw_tool_draw_timeout (GimpDrawTool *draw_tool)
 {
+  guint64 now = g_get_monotonic_time ();
+
+  /* keep the timeout running if the last drawing just happened */
+  if ((now - draw_tool->last_draw_time) <= MINIMUM_DRAW_INTERVAL)
+    return TRUE;
+
   draw_tool->draw_timeout = 0;
 
   gimp_draw_tool_draw (draw_tool);
@@ -190,11 +197,20 @@ gimp_draw_tool_draw_timeout (GimpDrawTool *draw_tool)
 static void
 gimp_draw_tool_draw (GimpDrawTool *draw_tool)
 {
+  guint64 now = g_get_monotonic_time ();
+
   if (draw_tool->display &&
       draw_tool->paused_count == 0 &&
-      ! draw_tool->draw_timeout)
+      (! draw_tool->draw_timeout ||
+       (now - draw_tool->last_draw_time) > MINIMUM_DRAW_INTERVAL))
     {
       GimpDisplayShell *shell = gimp_display_get_shell (draw_tool->display);
+
+      if (draw_tool->draw_timeout)
+        {
+          g_source_remove (draw_tool->draw_timeout);
+          draw_tool->draw_timeout = 0;
+        }
 
       gimp_draw_tool_undraw (draw_tool);
 
@@ -216,6 +232,8 @@ gimp_draw_tool_draw (GimpDrawTool *draw_tool)
 
       if (draw_tool->item)
         gimp_display_shell_add_tool_item (shell, draw_tool->item);
+
+      draw_tool->last_draw_time = now;
     }
 }
 
@@ -275,6 +293,8 @@ gimp_draw_tool_stop (GimpDrawTool *draw_tool)
       draw_tool->draw_timeout = 0;
     }
 
+  draw_tool->last_draw_time = 0;
+
   draw_tool->display = NULL;
 }
 
@@ -308,16 +328,29 @@ gimp_draw_tool_resume (GimpDrawTool *draw_tool)
 
   draw_tool->paused_count--;
 
+  if (draw_tool->paused_count == 0)
+    {
 #ifdef USE_TIMEOUT
-  if (draw_tool->paused_count == 0 && ! draw_tool->draw_timeout)
-    draw_tool->draw_timeout =
-      gdk_threads_add_timeout_full (G_PRIORITY_HIGH_IDLE,
-                                    DRAW_TIMEOUT,
-                                    (GSourceFunc) gimp_draw_tool_draw_timeout,
-                                    draw_tool, NULL);
-#else
-  gimp_draw_tool_draw (draw_tool);
+      /* Don't install the timeout if the draw tool isn't active, so
+       * suspend()/resume() can always be called, and have no side
+       * effect on an inactive tool. See bug #687851.
+       */
+      if (gimp_draw_tool_is_active (draw_tool) && ! draw_tool->draw_timeout)
+        {
+          draw_tool->draw_timeout =
+            gdk_threads_add_timeout_full (G_PRIORITY_HIGH_IDLE,
+                                          DRAW_TIMEOUT,
+                                          (GSourceFunc) gimp_draw_tool_draw_timeout,
+                                          draw_tool, NULL);
+        }
 #endif
+
+      /* call draw() anyway, it will do nothing if the timeout is
+       * running, but will additionally check the drawing times to
+       * ensure the minimum framerate
+       */
+      gimp_draw_tool_draw (draw_tool);
+    }
 }
 
 /**
@@ -976,12 +1009,12 @@ gimp_draw_tool_on_handle (GimpDrawTool     *draw_tool,
 
   shell = gimp_display_get_shell (display);
 
-  gimp_display_shell_transform_xy_f (shell,
-                                     x, y,
-                                     &tx, &ty);
-  gimp_display_shell_transform_xy_f (shell,
-                                     handle_x, handle_y,
-                                     &handle_tx, &handle_ty);
+  gimp_display_shell_zoom_xy_f (shell,
+                                x, y,
+                                &tx, &ty);
+  gimp_display_shell_zoom_xy_f (shell,
+                                handle_x, handle_y,
+                                &handle_tx, &handle_ty);
 
   switch (type)
     {

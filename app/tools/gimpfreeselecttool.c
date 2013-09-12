@@ -74,7 +74,7 @@ typedef struct
   gint               max_n_saved_points_lower_segment;
   gint               max_n_saved_points_higher_segment;
 
-  /* Keeps track wether or not a modification of the polygon has been
+  /* Keeps track whether or not a modification of the polygon has been
    * made between _button_press and _button_release
    */
   gboolean           polygon_modified;
@@ -105,12 +105,12 @@ typedef struct
   /* The selection operation active when the tool was started */
   GimpChannelOps     operation_at_start;
 
-  /* Wether or not to constrain the angle for newly created polygonal
+  /* Whether or not to constrain the angle for newly created polygonal
    * segments.
    */
   gboolean           constrain_angle;
 
-  /* Wether or not to supress handles (so that new segments can be
+  /* Whether or not to suppress handles (so that new segments can be
    * created immediately after an existing segment vertex.
    */
   gboolean           supress_handles;
@@ -806,7 +806,7 @@ gimp_free_select_tool_handle_click (GimpFreeSelectTool *fst,
         }
 
       /* After the segments are up to date and we have handled
-       * double-click, see if it's commiting time
+       * double-click, see if it's committing time
        */
       if (gimp_free_select_tool_should_close (fst,
                                               display,
@@ -838,7 +838,7 @@ gimp_free_select_tool_handle_normal_release (GimpFreeSelectTool *fst,
       gimp_free_select_tool_finish_free_segment (fst);
     }
 
-  /* After the segments are up to date, see if it's commiting time */
+  /* After the segments are up to date, see if it's committing time */
   if (gimp_free_select_tool_should_close (fst,
                                           display,
                                           NO_CLICK_TIME_AVAILABLE,
@@ -1385,8 +1385,8 @@ gimp_free_select_tool_modifier_key (GimpTool        *tool,
     {
       gimp_draw_tool_pause (draw_tool);
 
-      priv->constrain_angle = state & (gimp_get_constrain_behavior_mask () ?
-                                       TRUE : FALSE);
+      priv->constrain_angle = ((state & gimp_get_constrain_behavior_mask ()) ?
+                               TRUE : FALSE);
 
       priv->supress_handles = state & GDK_SHIFT_MASK ? TRUE : FALSE;
 
@@ -1415,8 +1415,8 @@ gimp_free_select_tool_active_modifier_key (GimpTool        *tool,
 
   gimp_draw_tool_pause (draw_tool);
 
-  priv->constrain_angle = state & (gimp_get_constrain_behavior_mask () ?
-                                   TRUE : FALSE);
+  priv->constrain_angle = ((state & gimp_get_constrain_behavior_mask ()) ?
+                           TRUE : FALSE);
 
   /* If we didn't came here due to a mouse release, immediately update
    * the position of the thing we move.

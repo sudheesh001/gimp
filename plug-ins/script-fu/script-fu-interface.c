@@ -22,6 +22,10 @@
 #include <libgimp/gimp.h>
 #include <libgimp/gimpui.h>
 
+#ifdef GDK_WINDOWING_QUARTZ
+#import <Cocoa/Cocoa.h>
+#endif
+
 #include "tinyscheme/scheme-private.h"
 #include "scheme-wrapper.h"
 
@@ -283,7 +287,7 @@ script_fu_interface (SFScript  *script,
       /*  we add a colon after the label;
        *  some languages want an extra space here
        */
-      label_text = g_strdup_printf (_("%s:"), gettext (arg->label));
+      label_text = g_strdup_printf (_("%s:"), arg->label);
 
       switch (arg->type)
         {
@@ -346,7 +350,7 @@ script_fu_interface (SFScript  *script,
         case SF_TOGGLE:
           g_free (label_text);
           label_text = NULL;
-          widget = gtk_check_button_new_with_mnemonic (gettext (arg->label));
+          widget = gtk_check_button_new_with_mnemonic (arg->label);
           gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (widget),
                                         arg->value.sfa_toggle);
 
@@ -507,7 +511,7 @@ script_fu_interface (SFScript  *script,
                list = g_slist_next (list))
             {
               gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (widget),
-                                              gettext (list->data));
+                                              list->data);
             }
 
           gtk_combo_box_set_active (GTK_COMBO_BOX (widget),
@@ -737,11 +741,23 @@ script_fu_response (GtkWidget *widget,
       gtk_widget_set_sensitive (action_area, FALSE);
 
       script_fu_ok (script);
+
+#ifdef GDK_WINDOWING_QUARTZ
+      [NSApp hide: nil];
+      while (g_main_context_pending (NULL))
+        g_main_context_iteration (NULL, TRUE);
+#endif
       gtk_widget_destroy (sf_interface->dialog);
       break;
 
     default:
       sf_status = GIMP_PDB_CANCEL;
+
+#ifdef GDK_WINDOWING_QUARTZ
+      [NSApp hide: nil];
+      while (g_main_context_pending (NULL))
+        g_main_context_iteration (NULL, TRUE);
+#endif
       gtk_widget_destroy (sf_interface->dialog);
       break;
     }

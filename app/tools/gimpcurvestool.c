@@ -82,11 +82,14 @@ static void       gimp_curves_tool_oper_update    (GimpTool             *tool,
 
 static void       gimp_curves_tool_color_picked   (GimpColorTool        *color_tool,
                                                    GimpColorPickState    pick_state,
+                                                   gdouble               x,
+                                                   gdouble               y,
                                                    const Babl           *sample_format,
                                                    const GimpRGB        *color,
                                                    gint                  color_index);
 static GeglNode * gimp_curves_tool_get_operation  (GimpImageMapTool     *image_map_tool,
-                                                   GObject             **config);
+                                                   GObject             **config,
+                                                   gchar               **undo_desc);
 static void       gimp_curves_tool_dialog         (GimpImageMapTool     *image_map_tool);
 static void       gimp_curves_tool_reset          (GimpImageMapTool     *image_map_tool);
 static gboolean   gimp_curves_tool_settings_import(GimpImageMapTool     *image_map_tool,
@@ -197,11 +200,6 @@ gimp_curves_tool_initialize (GimpTool     *tool,
   GimpDrawable   *drawable = gimp_image_get_active_drawable (image);
   GimpHistogram  *histogram;
 
-  if (! drawable)
-    return FALSE;
-
-  gimp_config_reset (GIMP_CONFIG (c_tool->config));
-
   if (! GIMP_TOOL_CLASS (parent_class)->initialize (tool, display, error))
     {
       return FALSE;
@@ -214,11 +212,22 @@ gimp_curves_tool_initialize (GimpTool     *tool,
   gimp_int_combo_box_set_sensitivity (GIMP_INT_COMBO_BOX (c_tool->channel_menu),
                                       curves_menu_sensitivity, drawable, NULL);
 
-  histogram = gimp_histogram_new ();
+  histogram = gimp_histogram_new (TRUE);
   gimp_drawable_calculate_histogram (drawable, histogram);
   gimp_histogram_view_set_background (GIMP_HISTOGRAM_VIEW (c_tool->graph),
                                       histogram);
-  gimp_histogram_unref (histogram);
+  g_object_unref (histogram);
+
+  if (gimp_drawable_get_component_type (drawable) == GIMP_COMPONENT_TYPE_U8)
+    {
+      gimp_curve_view_set_range_x (GIMP_CURVE_VIEW (c_tool->graph), 0, 255);
+      gimp_curve_view_set_range_y (GIMP_CURVE_VIEW (c_tool->graph), 0, 255);
+    }
+  else
+    {
+      gimp_curve_view_set_range_x (GIMP_CURVE_VIEW (c_tool->graph), 0.0, 1.0);
+      gimp_curve_view_set_range_y (GIMP_CURVE_VIEW (c_tool->graph), 0.0, 1.0);
+    }
 
   return TRUE;
 }
@@ -280,8 +289,11 @@ gimp_curves_tool_key_press (GimpTool    *tool,
 {
   GimpCurvesTool *c_tool = GIMP_CURVES_TOOL (tool);
 
-  if (gtk_widget_event (c_tool->graph, (GdkEvent *) kevent))
-    return TRUE;
+  if (tool->display && c_tool->graph)
+    {
+      if (gtk_widget_event (c_tool->graph, (GdkEvent *) kevent))
+        return TRUE;
+    }
 
   return GIMP_TOOL_CLASS (parent_class)->key_press (tool, kevent, display);
 }
@@ -326,6 +338,8 @@ gimp_curves_tool_oper_update (GimpTool         *tool,
 static void
 gimp_curves_tool_color_picked (GimpColorTool      *color_tool,
                                GimpColorPickState  pick_state,
+                               gdouble             x,
+                               gdouble             y,
                                const Babl         *sample_format,
                                const GimpRGB      *color,
                                gint                color_index)
@@ -351,28 +365,23 @@ gimp_curves_tool_color_picked (GimpColorTool      *color_tool,
 
 static GeglNode *
 gimp_curves_tool_get_operation (GimpImageMapTool  *image_map_tool,
-                                GObject          **config)
+                                GObject          **config,
+                                gchar            **undo_desc)
 {
   GimpCurvesTool *tool = GIMP_CURVES_TOOL (image_map_tool);
-  GeglNode       *node;
-
-  node = g_object_new (GEGL_TYPE_NODE,
-                       "operation", "gimp:curves",
-                       NULL);
 
   tool->config = g_object_new (GIMP_TYPE_CURVES_CONFIG, NULL);
-
-  *config = G_OBJECT (tool->config);
 
   g_signal_connect_object (tool->config, "notify",
                            G_CALLBACK (gimp_curves_tool_config_notify),
                            tool, 0);
 
-  gegl_node_set (node,
-                 "config", tool->config,
-                 NULL);
+  *config = G_OBJECT (tool->config);
 
-  return node;
+  return gegl_node_new_child (NULL,
+                              "operation", "gimp:curves",
+                              "config",    tool->config,
+                              NULL);
 }
 
 
@@ -773,8 +782,6 @@ gimp_curves_tool_config_notify (GObject        *object,
       gimp_int_combo_box_set_active (GIMP_INT_COMBO_BOX (tool->curve_type),
                                      curve->curve_type);
     }
-
-  gimp_image_map_tool_preview (GIMP_IMAGE_MAP_TOOL (tool));
 }
 
 static void

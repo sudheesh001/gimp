@@ -30,11 +30,11 @@
 
 #include "core-types.h"
 
+#include "gegl/gimp-gegl-apply-operation.h"
 #include "gegl/gimp-gegl-utils.h"
 
 #include "gimp.h"
 #include "gimp-utils.h"
-#include "gimp-apply-operation.h"
 #include "gimpchannel.h"
 #include "gimpcontext.h"
 #include "gimpdrawable-blend.h"
@@ -550,10 +550,13 @@ gradient_precalc_shapeburst (GimpImage           *image,
                                                  region->width, region->height),
                                  babl_format ("Y float"));
 
-  /*  allocate the selection mask copy  */
+  /*  allocate the selection mask copy
+   *  XXX: its format should be the same of gimp:shapeburst input buffer
+   *       porting the op to 'float' should be reflected here as well
+   */
   temp_buffer = gegl_buffer_new (GEGL_RECTANGLE (0, 0,
                                                  region->width, region->height),
-                                 gimp_image_get_mask_format (image));
+                                 babl_format ("Y u8"));
 
   mask = gimp_image_get_mask (image);
 
@@ -579,8 +582,7 @@ gradient_precalc_shapeburst (GimpImage           *image,
         {
           const Babl *component_format;
 
-          component_format =
-            gimp_image_get_component_format (image, GIMP_ALPHA_CHANNEL);
+          component_format = babl_format ("A u8");
 
           /*  extract the aplha into the temp mask  */
           gegl_buffer_set_format (temp_buffer, component_format);
@@ -607,9 +609,9 @@ gradient_precalc_shapeburst (GimpImage           *image,
 
   gimp_gegl_progress_connect (shapeburst, progress, NULL);
 
-  gimp_apply_operation (temp_buffer, NULL, NULL,
-                        shapeburst,
-                        dist_buffer, NULL);
+  gimp_gegl_apply_operation (temp_buffer, NULL, NULL,
+                             shapeburst,
+                             dist_buffer, NULL);
 
   gegl_node_get (shapeburst, "max-iterations", &max, NULL);
 
@@ -1005,7 +1007,7 @@ gradient_fill_region (GimpImage           *image,
               for (y = roi->y; y < endy; y++)
                 for (x = roi->x; x < endx; x++)
                   {
-                    GimpRGB  color;
+                    GimpRGB  color = { 0.0, 0.0, 0.0, 1.0 };
                     gint     i = g_rand_int (dither_rand);
 
                     gradient_render_pixel (x, y, &color, &rbd);
@@ -1023,7 +1025,7 @@ gradient_fill_region (GimpImage           *image,
               for (y = roi->y; y < endy; y++)
                 for (x = roi->x; x < endx; x++)
                   {
-                    GimpRGB  color;
+                    GimpRGB  color = { 0.0, 0.0, 0.0, 1.0 };
 
                     gradient_render_pixel (x, y, &color, &rbd);
 

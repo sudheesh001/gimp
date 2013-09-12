@@ -24,106 +24,37 @@
 
 #include "gimp-gegl-types.h"
 
-#include "base/tile-manager.h"
-
 #include "core/gimpprogress.h"
 
 #include "gimp-gegl-utils.h"
-#include "gimptilebackendtilemanager.h"
 
 
-const gchar *
-gimp_interpolation_to_gegl_filter (GimpInterpolationType interpolation)
+GType
+gimp_gegl_get_op_enum_type (const gchar *operation,
+                            const gchar *property)
 {
-  switch (interpolation)
-    {
-    case GIMP_INTERPOLATION_NONE:    return "nearest";
-    case GIMP_INTERPOLATION_LINEAR:  return "linear";
-    case GIMP_INTERPOLATION_CUBIC:   return "cubic";
-    case GIMP_INTERPOLATION_LOHALO:  return "lohalo";
-    default:
-      break;
-    }
+  GeglNode   *node;
+  GObject    *op;
+  GParamSpec *pspec;
 
-  return "nearest";
-}
+  g_return_val_if_fail (operation != NULL, G_TYPE_NONE);
+  g_return_val_if_fail (property != NULL, G_TYPE_NONE);
 
-GeglBuffer *
-gimp_gegl_buffer_new (const GeglRectangle *rect,
-                      const Babl          *format)
-{
-  TileManager *tiles;
-  GeglBuffer  *buffer;
+  node = g_object_new (GEGL_TYPE_NODE,
+                       "operation", operation,
+                       NULL);
+  g_object_get (node, "gegl-operation", &op, NULL);
+  g_object_unref (node);
 
-  g_return_val_if_fail (rect != NULL, NULL);
-  g_return_val_if_fail (format != NULL, NULL);
+  g_return_val_if_fail (op != NULL, G_TYPE_NONE);
 
-  tiles = tile_manager_new (rect->width, rect->height,
-                            babl_format_get_bytes_per_pixel (format));
-  buffer = gimp_tile_manager_create_buffer (tiles, format);
-  tile_manager_unref (tiles);
+  pspec = g_object_class_find_property (G_OBJECT_GET_CLASS (op), property);
 
-  return buffer;
-}
+  g_return_val_if_fail (G_IS_PARAM_SPEC_ENUM (pspec), G_TYPE_NONE);
 
-GeglBuffer *
-gimp_gegl_buffer_dup (GeglBuffer *buffer)
-{
-  const Babl  *format = gegl_buffer_get_format (buffer);
-  TileManager *tiles;
-  GeglBuffer  *dup;
+  g_object_unref (op);
 
-  tiles = tile_manager_new (gegl_buffer_get_width (buffer),
-                            gegl_buffer_get_height (buffer),
-                            babl_format_get_bytes_per_pixel (format));
-
-  dup = gimp_tile_manager_create_buffer (tiles, format);
-  tile_manager_unref (tiles);
-
-  gegl_buffer_copy (buffer, NULL, dup, NULL);
-
-  return dup;
-}
-
-GeglBuffer *
-gimp_tile_manager_create_buffer (TileManager *tm,
-                                 const Babl  *format)
-{
-  GeglTileBackend *backend;
-  GeglBuffer      *buffer;
-
-  backend = gimp_tile_backend_tile_manager_new (tm, format);
-  buffer = gegl_buffer_new_for_backend (NULL, backend);
-  g_object_unref (backend);
-
-  return buffer;
-}
-
-/* temp hack */
-GeglTileBackend * gegl_buffer_backend (GeglBuffer *buffer);
-
-TileManager *
-gimp_gegl_buffer_get_tiles (GeglBuffer *buffer)
-{
-  GeglTileBackend *backend;
-
-  g_return_val_if_fail (GEGL_IS_BUFFER (buffer), NULL);
-
-  backend = gegl_buffer_backend (buffer);
-
-  g_return_val_if_fail (GIMP_IS_TILE_BACKEND_TILE_MANAGER (backend), NULL);
-
-  gegl_buffer_flush (buffer);
-
-  return gimp_tile_backend_tile_manager_get_tiles (backend);
-}
-
-void
-gimp_gegl_buffer_refetch_tiles (GeglBuffer *buffer)
-{
-  g_return_if_fail (GEGL_IS_BUFFER (buffer));
-
-  gegl_tile_source_reinit (GEGL_TILE_SOURCE (buffer));
+  return G_TYPE_FROM_CLASS (G_PARAM_SPEC_ENUM (pspec)->enum_class);
 }
 
 GeglColor *

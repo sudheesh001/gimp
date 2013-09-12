@@ -26,12 +26,13 @@
 
 #include "core-types.h"
 
-#include "gimp-apply-operation.h"
+#include "gegl/gimp-gegl-apply-operation.h"
+
 #include "gimpdrawable.h"
 #include "gimpdrawable-operation.h"
 #include "gimpdrawable-shadow.h"
-#include "gimpimagemapconfig.h"
 #include "gimpprogress.h"
+#include "gimpsettings.h"
 
 
 /*  public functions  */
@@ -58,10 +59,10 @@ gimp_drawable_apply_operation (GimpDrawable *drawable,
 
   dest_buffer = gimp_drawable_get_shadow_buffer (drawable);
 
-  gimp_apply_operation (gimp_drawable_get_buffer (drawable),
-                        progress, undo_desc,
-                        operation,
-                        dest_buffer, &rect);
+  gimp_gegl_apply_operation (gimp_drawable_get_buffer (drawable),
+                             progress, undo_desc,
+                             operation,
+                             dest_buffer, &rect);
 
   gimp_drawable_merge_shadow_buffer (drawable, TRUE, undo_desc);
   gimp_drawable_free_shadow_buffer (drawable);
@@ -86,7 +87,7 @@ gimp_drawable_apply_operation_by_name (GimpDrawable *drawable,
   g_return_if_fail (progress == NULL || GIMP_IS_PROGRESS (progress));
   g_return_if_fail (undo_desc != NULL);
   g_return_if_fail (operation_type != NULL);
-  g_return_if_fail (config == NULL || GIMP_IS_IMAGE_MAP_CONFIG (config));
+  g_return_if_fail (config == NULL || GIMP_IS_SETTINGS (config));
 
   node = g_object_new (GEGL_TYPE_NODE,
                        "operation", operation_type,
@@ -100,23 +101,4 @@ gimp_drawable_apply_operation_by_name (GimpDrawable *drawable,
   gimp_drawable_apply_operation (drawable, progress, undo_desc, node);
 
   g_object_unref (node);
-}
-
-void
-gimp_drawable_apply_operation_to_buffer (GimpDrawable *drawable,
-                                         GimpProgress *progress,
-                                         const gchar  *undo_desc,
-                                         GeglNode     *operation,
-                                         GeglBuffer   *dest_buffer)
-{
-  g_return_if_fail (GIMP_IS_DRAWABLE (drawable));
-  g_return_if_fail (progress == NULL || GIMP_IS_PROGRESS (progress));
-  g_return_if_fail (progress == NULL || undo_desc != NULL);
-  g_return_if_fail (GEGL_IS_NODE (operation));
-  g_return_if_fail (GEGL_IS_BUFFER (dest_buffer));
-
-  gimp_apply_operation (gimp_drawable_get_buffer (drawable),
-                        progress, undo_desc,
-                        operation,
-                        dest_buffer, NULL);
 }

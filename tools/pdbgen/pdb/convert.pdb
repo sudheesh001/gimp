@@ -37,9 +37,9 @@ HELP
 {
   if (gimp_pdb_image_is_not_base_type (image, GIMP_RGB, error))
     {
-      success = gimp_image_convert (image, GIMP_RGB,
-                                    0, 0, FALSE, FALSE, 0, NULL,
-                                    NULL, error);
+      success = gimp_image_convert_type (image, GIMP_RGB,
+                                         0, 0, FALSE, FALSE, FALSE, 0, NULL,
+                                         NULL, error);
     }
   else
     {
@@ -71,9 +71,9 @@ HELP
 {
   if (gimp_pdb_image_is_not_base_type (image, GIMP_GRAY, error))
     {
-      success = gimp_image_convert (image, GIMP_GRAY,
-				    0, 0, FALSE, FALSE, 0, NULL,
-				    NULL, error);
+      success = gimp_image_convert_type (image, GIMP_GRAY,
+				         0, 0, FALSE, FALSE, FALSE, 0, NULL,
+				         NULL, error);
     }
   else
     {
@@ -131,7 +131,7 @@ HELP
   GimpPalette *pal = NULL;
 
   if (gimp_pdb_image_is_not_base_type (image, GIMP_INDEXED, error) &&
-      gimp_pdb_image_is_precision (image, GIMP_PRECISION_U8, error) &&
+      gimp_pdb_image_is_precision (image, GIMP_PRECISION_U8_GAMMA, error) &&
       gimp_item_stack_is_flat (GIMP_ITEM_STACK (gimp_image_get_layers (image))))
     {
       switch (palette_type)
@@ -168,11 +168,11 @@ HELP
     }
 
   if (success)
-    success = gimp_image_convert (image, GIMP_INDEXED,
-                                  num_cols, dither_type,
-                                  alpha_dither, remove_unused,
-				  palette_type, pal,
-                                  NULL, error);
+    success = gimp_image_convert_type (image, GIMP_INDEXED,
+                                       num_cols, dither_type,
+                                       alpha_dither, FALSE, remove_unused,
+				       palette_type, pal,
+                                       NULL, error);
 }
 CODE
     );
@@ -205,7 +205,7 @@ HELP
 {
   if (width == 0 || height == 0 || matrix_length == width * height)
     {
-      gimp_image_convert_set_dither_matrix (matrix, width, height);
+      gimp_image_convert_type_set_dither_matrix (matrix, width, height);
     }
   else
     {
@@ -246,7 +246,7 @@ HELP
   if (gimp_pdb_image_is_not_base_type (image, GIMP_INDEXED, error) &&
       gimp_pdb_image_is_not_precision (image, precision, error))
     {
-      gimp_image_convert_precision (image, precision, NULL);
+      gimp_image_convert_precision (image, precision, 0, 0, 0, NULL);
     }
   else
     {
@@ -259,8 +259,8 @@ CODE
 
 @headers = qw("core/gimp.h"
               "core/gimpimage.h"
-              "core/gimpimage-convert.h"
               "core/gimpimage-convert-precision.h"
+              "core/gimpimage-convert-type.h"
               "core/gimpitemstack.h"
               "core/gimppalette.h"
               "plug-in/gimpplugin.h"

@@ -23,9 +23,13 @@
 
 #include <gegl-plugin.h>
 
+#include <libgimpbase/gimpbase.h>
+
 #include "operations-types.h"
 
 #include "gimpoperationnormalmode.h"
+
+GimpLayerModeFunction gimp_operation_normal_mode_process_pixels = NULL;
 
 
 static gboolean gimp_operation_normal_parent_process (GeglOperation        *operation,
@@ -48,6 +52,22 @@ G_DEFINE_TYPE (GimpOperationNormalMode, gimp_operation_normal_mode,
 
 #define parent_class gimp_operation_normal_mode_parent_class
 
+static const gchar* reference_xml = "<?xml version='1.0' encoding='UTF-8'?>"
+"<gegl>"
+"<node operation='gimp:normal-mode'>"
+"  <node operation='gegl:load'>"
+"    <params>"
+"      <param name='path'>blending-test-B.png</param>"
+"    </params>"
+"  </node>"
+"</node>"
+"<node operation='gegl:load'>"
+"  <params>"
+"    <param name='path'>blending-test-A.png</param>"
+"  </params>"
+"</node>"
+"</gegl>";
+
 
 static void
 gimp_operation_normal_mode_class_init (GimpOperationNormalModeClass *klass)
@@ -59,13 +79,27 @@ gimp_operation_normal_mode_class_init (GimpOperationNormalModeClass *klass)
   point_class     = GEGL_OPERATION_POINT_COMPOSER3_CLASS (klass);
 
   gegl_operation_class_set_keys (operation_class,
-                                 "name",        "gimp:normal-mode",
-                                 "description", "GIMP normal mode operation",
+                                 "name",                  "gimp:normal-mode",
+                                 "description",           "GIMP normal mode operation",
+                                 "reference-image",       "normal-mode.png",
+                                 "reference-composition", reference_xml,
                                  NULL);
 
   operation_class->process     = gimp_operation_normal_parent_process;
 
   point_class->process         = gimp_operation_normal_mode_process;
+
+  gimp_operation_normal_mode_process_pixels = gimp_operation_normal_mode_process_pixels_core;
+
+#if COMPILE_SSE2_INTRINISICS
+  if (gimp_cpu_accel_get_support() & GIMP_CPU_ACCEL_X86_SSE2)
+    gimp_operation_normal_mode_process_pixels = gimp_operation_normal_mode_process_pixels_sse2;
+#endif /* COMPILE_SSE2_INTRINISICS */
+
+#if COMPILE_SSE4_1_INTRINISICS
+  if (gimp_cpu_accel_get_support() & GIMP_CPU_ACCEL_X86_SSE4_1)
+    gimp_operation_normal_mode_process_pixels = gimp_operation_normal_mode_process_pixels_sse4;
+#endif /* COMPILE_SSE4_1_INTRINISICS */
 }
 
 static void
@@ -80,36 +114,44 @@ gimp_operation_normal_parent_process (GeglOperation        *operation,
                                       const GeglRectangle  *result,
                                       gint                  level)
 {
-  const GeglRectangle *in_extent  = NULL;
-  const GeglRectangle *aux_extent = NULL;
-  GObject             *input;
-  GObject             *aux;
+  GimpOperationPointLayerMode *point;
 
-  /* get the raw values this does not increase the reference count */
-  input = gegl_operation_context_get_object (context, "input");
-  aux   = gegl_operation_context_get_object (context, "aux");
+  point = GIMP_OPERATION_POINT_LAYER_MODE (operation);
 
-  /* pass the input/aux buffers directly through if they are not
-   * overlapping
-   */
-  if (input)
-    in_extent = gegl_buffer_get_abyss (GEGL_BUFFER (input));
-
-  if (! input ||
-      (aux && ! gegl_rectangle_intersect (NULL, in_extent, result)))
+  if (point->opacity == 1.0 &&
+      ! gegl_operation_context_get_object (context, "aux2"))
     {
-      gegl_operation_context_set_object (context, "output", aux);
-      return TRUE;
-    }
+      const GeglRectangle *in_extent  = NULL;
+      const GeglRectangle *aux_extent = NULL;
+      GObject             *input;
+      GObject             *aux;
 
-  if (aux)
-    aux_extent = gegl_buffer_get_abyss (GEGL_BUFFER (aux));
+      /* get the raw values this does not increase the reference count */
+      input = gegl_operation_context_get_object (context, "input");
+      aux   = gegl_operation_context_get_object (context, "aux");
 
-  if (! aux ||
-      (input && ! gegl_rectangle_intersect (NULL, aux_extent, result)))
-    {
-      gegl_operation_context_set_object (context, "output", input);
-      return TRUE;
+      /* pass the input/aux buffers directly through if they are not
+       * overlapping
+       */
+      if (input)
+        in_extent = gegl_buffer_get_abyss (GEGL_BUFFER (input));
+
+      if (! input ||
+          (aux && ! gegl_rectangle_intersect (NULL, in_extent, result)))
+        {
+          gegl_operation_context_set_object (context, "output", aux);
+          return TRUE;
+        }
+
+      if (aux)
+        aux_extent = gegl_buffer_get_abyss (GEGL_BUFFER (aux));
+
+      if (! aux ||
+          (input && ! gegl_rectangle_intersect (NULL, aux_extent, result)))
+        {
+          gegl_operation_context_set_object (context, "output", input);
+          return TRUE;
+        }
     }
 
   /* chain up, which will create the needed buffers for our actual
@@ -130,80 +172,60 @@ gimp_operation_normal_mode_process (GeglOperation       *operation,
                                     const GeglRectangle *roi,
                                     gint                 level)
 {
-  GimpOperationPointLayerMode *point    = GIMP_OPERATION_POINT_LAYER_MODE (operation);
-  gdouble                      opacity  = point->opacity;
-  gfloat                      *in       = in_buf;
-  gfloat                      *aux      = aux_buf;
-  gfloat                      *mask     = aux2_buf;
-  gfloat                      *out      = out_buf;
-  const gboolean               has_mask = mask != NULL;
+  gfloat opacity = GIMP_OPERATION_POINT_LAYER_MODE (operation)->opacity;
 
-  if (point->premultiplied)
+  return gimp_operation_normal_mode_process_pixels (in_buf, aux_buf, aux2_buf, out_buf, opacity, samples, roi, level);
+}
+
+gboolean
+gimp_operation_normal_mode_process_pixels_core (gfloat              *in,
+                                                gfloat              *aux,
+                                                gfloat              *mask,
+                                                gfloat              *out,
+                                                gfloat               opacity,
+                                                glong                samples,
+                                                const GeglRectangle *roi,
+                                                gint                 level)
+{
+  const gboolean has_mask = mask != NULL;
+
+  while (samples--)
     {
-      while (samples--)
-        {
-          gdouble value;
-          gfloat  aux_alpha;
-          gint    b;
+      gfloat aux_alpha;
 
-          value = opacity;
-          if (has_mask)
-            value *= *mask;
-          aux_alpha = aux[ALPHA] * value;
+      aux_alpha = aux[ALPHA] * opacity;
+      if (has_mask)
+        aux_alpha *= *mask;
+
+      out[ALPHA] = aux_alpha + in[ALPHA] - aux_alpha * in[ALPHA];
+
+      if (out[ALPHA])
+        {
+          gfloat in_weight       = in[ALPHA] * (1.0f - aux_alpha);
+          gfloat recip_out_alpha = 1.0f / out[ALPHA];
+          gint   b;
 
           for (b = RED; b < ALPHA; b++)
             {
-              out[b] = aux[b] * value + in[b] * (1.0f - aux_alpha);
+              out[b] = (aux[b] * aux_alpha + in[b] * in_weight) * recip_out_alpha;
             }
-
-          out[ALPHA] = aux_alpha + in[ALPHA] - aux_alpha * in[ALPHA];
-
-          in   += 4;
-          aux  += 4;
-          out  += 4;
-
-          if (has_mask)
-            mask++;
         }
-    }
-  else
-    {
-      while (samples--)
+      else
         {
-          gfloat aux_alpha;
+          gint b;
 
-          aux_alpha = aux[ALPHA] * opacity;
-          if (has_mask)
-            aux_alpha *= *mask;
-
-          out[ALPHA] = aux_alpha + in[ALPHA] - aux_alpha * in[ALPHA];
-
-          if (out[ALPHA])
+          for (b = RED; b < ALPHA; b++)
             {
-              gint b;
-
-              for (b = RED; b < ALPHA; b++)
-                {
-                  out[b] = (aux[b] * aux_alpha + in[b] * in[ALPHA] * (1.0f - aux_alpha)) / out[ALPHA];
-                }
+              out[b] = in[b];
             }
-          else
-            {
-              gint b;
-
-              for (b = RED; b < ALPHA; b++)
-                {
-                  out[b] = in[b];
-                }
-            }
-
-          in   += 4;
-          aux  += 4;
-          out  += 4;
-
-          if (has_mask)
-            mask++;
         }
+
+      in   += 4;
+      aux  += 4;
+      out  += 4;
+
+      if (has_mask)
+        mask++;
     }
 
   return TRUE;

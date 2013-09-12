@@ -19,10 +19,11 @@ libexec_PROGRAMS = file-compressor
 file_compressor_SOURCES = \
 	file-compressor.c
 
-INCLUDES = \
+AM_CPPFLAGS = \
 	-I$(top_srcdir)	\
 	$(GTK_CFLAGS)	\
 	$(GEGL_CFLAGS) \
+	$(LZMA_CFLAGS) \
 	-I$(includedir)
 
 LDADD = \
@@ -35,4 +36,5 @@ LDADD = \
 	$(RT_LIBS)		\
 	$(INTLLIBS)		\
 	$(Z_LIBS)		\
-	$(BZIP2_LIBS)
+	$(BZIP2_LIBS)		\
+	$(LZMA_LIBS)

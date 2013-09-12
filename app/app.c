@@ -44,9 +44,6 @@
 
 #include "config/gimprc.h"
 
-#include "base/base.h"
-#include "base/tile-swap.h"
-
 #include "gegl/gimp-gegl.h"
 
 #include "core/gimp.h"
@@ -72,12 +69,12 @@
 
 /*  local prototypes  */
 
-static void       app_init_update_noop    (const gchar *text1,
-                                           const gchar *text2,
-                                           gdouble      percentage);
-static gboolean   app_exit_after_callback (Gimp        *gimp,
-                                           gboolean     kill_it,
-                                           GMainLoop   *loop);
+static void       app_init_update_noop    (const gchar  *text1,
+                                           const gchar  *text2,
+                                           gdouble       percentage);
+static gboolean   app_exit_after_callback (Gimp         *gimp,
+                                           gboolean      kill_it,
+                                           GMainLoop   **loop);
 
 
 /*  public functions  */
@@ -86,8 +83,6 @@ void
 app_libs_init (GOptionContext *context,
                gboolean        no_interface)
 {
-  g_type_init ();
-
   g_option_context_add_group (context, gegl_get_option_group ());
 
 #ifndef GIMP_CONSOLE_COMPILATION
@@ -147,23 +142,47 @@ app_run (const gchar         *full_prog_name,
 {
   GimpInitStatusFunc  update_status_func = NULL;
   Gimp               *gimp;
-  GimpGeglConfig     *config;
   GMainLoop          *loop;
-  gboolean            swap_is_ok;
+  GMainLoop          *run_loop;
+  gchar              *default_folder = NULL;
+
+  if (filenames && filenames[0] && ! filenames[1] &&
+      g_file_test (filenames[0], G_FILE_TEST_IS_DIR))
+    {
+      if (g_path_is_absolute (filenames[0]))
+        {
+          default_folder = g_filename_to_uri (filenames[0], NULL, NULL);
+        }
+      else
+        {
+          gchar *absolute = g_build_path (G_DIR_SEPARATOR_S,
+                                          g_get_current_dir (),
+                                          filenames[0],
+                                          NULL);
+          default_folder = g_filename_to_uri (absolute, NULL, NULL);
+          g_free (absolute);
+        }
+
+      filenames = NULL;
+    }
 
   /*  Create an instance of the "Gimp" object which is the root of the
    *  core object system
    */
   gimp = gimp_new (full_prog_name,
                    session_name,
+                   default_folder,
                    be_verbose,
                    no_data,
                    no_fonts,
                    no_interface,
                    use_shm,
+                   use_cpu_accel,
                    console_messages,
                    stack_trace_mode,
                    pdb_compat_mode);
+
+  gimp_cpu_accel_set_use (use_cpu_accel);
 
   errors_init (gimp, full_prog_name, use_debug_handler, stack_trace_mode);
 
@@ -189,14 +208,10 @@ app_run (const gchar         *full_prog_name,
 
   gimp_load_config (gimp, alternate_system_gimprc, alternate_gimprc);
 
-  config = GIMP_GEGL_CONFIG (gimp->config);
-
   /*  change the locale if a language if specified  */
   language_init (gimp->config->language);
 
   /*  initialize lowlevel stuff  */
-  swap_is_ok = base_init (config, be_verbose, use_cpu_accel);
-
   gimp_gegl_init (gimp);
 
 #ifndef GIMP_CONSOLE_COMPILATION
@@ -216,23 +231,16 @@ app_run (const gchar         *full_prog_name,
    */
   gimp_restore (gimp, update_status_func);
 
-  /* display a warning when no test swap file could be generated */
-  if (! swap_is_ok)
-    {
-      gchar *path = gimp_config_path_expand (config->swap_path, FALSE, NULL);
-
-      g_message (_("Unable to open a test swap file.\n\n"
-		   "To avoid data loss, please check the location "
-		   "and permissions of the swap directory defined in "
-		   "your Preferences (currently \"%s\")."), path);
-
-      g_free (path);
-    }
-
   /*  enable autosave late so we don't autosave when the
    *  monitor resolution is set in gui_init()
    */
   gimp_rc_set_autosave (GIMP_RC (gimp->edit_config), TRUE);
+
+  loop = run_loop = g_main_loop_new (NULL, FALSE);
+
+  g_signal_connect_after (gimp, "exit",
+                          G_CALLBACK (app_exit_after_callback),
+                          &run_loop);
 
   /*  Load the images given on the command-line.
    */
@@ -241,20 +249,21 @@ app_run (const gchar         *full_prog_name,
       gint i;
 
       for (i = 0; filenames[i] != NULL; i++)
-        file_open_from_command_line (gimp, filenames[i], as_new);
+        {
+          if (run_loop)
+            file_open_from_command_line (gimp, filenames[i], as_new);
+        }
     }
 
-  batch_run (gimp, batch_interpreter, batch_commands);
+  if (run_loop)
+    batch_run (gimp, batch_interpreter, batch_commands);
 
-  loop = g_main_loop_new (NULL, FALSE);
-
-  g_signal_connect_after (gimp, "exit",
-                          G_CALLBACK (app_exit_after_callback),
-                          loop);
-
-  gimp_threads_leave (gimp);
-  g_main_loop_run (loop);
-  gimp_threads_enter (gimp);
+  if (run_loop)
+    {
+      gimp_threads_leave (gimp);
+      g_main_loop_run (loop);
+      gimp_threads_enter (gimp);
+    }
 
   g_main_loop_unref (loop);
 
@@ -264,7 +273,6 @@ app_run (const gchar         *full_prog_name,
 
   errors_exit ();
   gegl_exit ();
-  base_exit ();
 }
 
 
@@ -279,9 +287,9 @@ app_init_update_noop (const gchar *text1,
 }
 
 static gboolean
-app_exit_after_callback (Gimp      *gimp,
-                         gboolean   kill_it,
-                         GMainLoop *loop)
+app_exit_after_callback (Gimp       *gimp,
+                         gboolean    kill_it,
+                         GMainLoop **loop)
 {
   if (gimp->be_verbose)
     g_print ("EXIT: %s\n", G_STRFUNC);
@@ -297,14 +305,14 @@ app_exit_after_callback (Gimp      *gimp,
 
 #ifdef GIMP_UNSTABLE
 
-  g_main_loop_quit (loop);
+  if (g_main_loop_is_running (*loop))
+    g_main_loop_quit (*loop);
+
+  *loop = NULL;
 
 #else
 
   gegl_exit ();
-
-  /*  make sure that the swap files are removed before we quit */
-  tile_swap_exit ();
 
   exit (EXIT_SUCCESS);
 

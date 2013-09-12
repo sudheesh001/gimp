@@ -42,7 +42,7 @@
  *  - rewrite the main function to make it work on tiles rather than
  *    process the image row by row. This should result in a significant
  *    speedup (thanks to quartic for this suggestion).
- *  - do something magical so that only one rotate can be occuring at a time!
+ *  - do something magical so that only one rotate can be occurring at a time!
  */
 
 #include "config.h"
@@ -132,7 +132,7 @@ query (void)
                           "Rotates a layer or the whole image by 90, 180 or 270 degrees",
                           "This plug-in does rotate the active layer or the "
                           "whole image clockwise by multiples of 90 degrees. "
-                          "When the whole image is choosen, the image is "
+                          "When the whole image is chosen, the image is "
                           "resized if necessary.",
                           PLUG_IN_AUTHOR,
                           PLUG_IN_COPYRIGHT,

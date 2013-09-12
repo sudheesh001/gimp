@@ -205,8 +205,6 @@ query (void)
                           GIMP_PLUGIN,
                           G_N_ELEMENTS (save_args), 0,
                           save_args, NULL);
-
-  gimp_register_file_handler_mime (SAVE2_PROC, "image/tiff");
 }
 
 static void
@@ -228,6 +226,7 @@ run (const gchar      *name,
   run_mode = param[0].data.d_int32;
 
   INIT_I18N ();
+  gegl_init (NULL, NULL);
 
   *nreturn_vals = 1;
   *return_vals  = values;
@@ -660,11 +659,12 @@ save_image (const gchar  *filename,
             gint32        orig_image,  /* the export function might have */
             GError      **error)       /* created a duplicate            */
 {
+  gboolean       status = FALSE;
   TIFF          *tif;
   gushort        red[256];
   gushort        grn[256];
   gushort        blu[256];
-  gint           cols, col, rows, row, i;
+  gint           cols, rows, row, i;
   glong          rowsperstrip;
   gushort        compression;
   gushort        extra_samples[1];
@@ -674,13 +674,15 @@ save_image (const gchar  *filename,
   gshort         samplesperpixel;
   gshort         bitspersample;
   gint           bytesperrow;
-  guchar        *t, *src, *data;
+  guchar        *t;
+  guchar        *src = NULL;
+  guchar        *data = NULL;
   guchar        *cmap;
   gint           num_colors;
   gint           success;
-  GimpDrawable  *drawable;
   GimpImageType  drawable_type;
-  GimpPixelRgn   pixel_rgn;
+  GeglBuffer    *buffer = NULL;
+  const Babl    *format;
   gint           tile_height;
   gint           y, yend;
   gboolean       is_bw    = FALSE;
@@ -709,7 +711,7 @@ save_image (const gchar  *filename,
         g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (errno),
                      _("Could not open '%s' for writing: %s"),
                      gimp_filename_to_utf8 (filename), g_strerror (errno));
-      return FALSE;
+      goto out;
     }
 
   TIFFSetWarningHandler (tiff_warning);
@@ -718,50 +720,79 @@ save_image (const gchar  *filename,
   gimp_progress_init_printf (_("Saving '%s'"),
                              gimp_filename_to_utf8 (filename));
 
-  drawable = gimp_drawable_get (layer);
+  if (gimp_image_get_precision (image) == GIMP_PRECISION_U8_GAMMA)
+    bitspersample = 8;
+  else
+    bitspersample = 16;
+
   drawable_type = gimp_drawable_type (layer);
-  gimp_pixel_rgn_init (&pixel_rgn, drawable,
-                       0, 0, drawable->width, drawable->height, FALSE, FALSE);
+  buffer = gimp_drawable_get_buffer (layer);
 
-  cols = drawable->width;
-  rows = drawable->height;
-
-  gimp_tile_cache_ntiles (1 + drawable->width / gimp_tile_width ());
+  cols = gegl_buffer_get_width (buffer);
+  rows = gegl_buffer_get_height (buffer);
 
   switch (drawable_type)
     {
     case GIMP_RGB_IMAGE:
       predictor       = 2;
       samplesperpixel = 3;
-      bitspersample   = 8;
       photometric     = PHOTOMETRIC_RGB;
-      bytesperrow     = cols * 3;
       alpha           = FALSE;
+      if (bitspersample == 8)
+        format        = babl_format ("R'G'B' u8");
+      else
+        format        = babl_format ("R'G'B' u16");
       break;
 
     case GIMP_GRAY_IMAGE:
       samplesperpixel = 1;
-      bitspersample   = 8;
       photometric     = PHOTOMETRIC_MINISBLACK;
-      bytesperrow     = cols;
       alpha           = FALSE;
+      if (bitspersample == 8)
+        format        = babl_format ("Y' u8");
+      else
+        format        = babl_format ("Y' u16");
       break;
 
     case GIMP_RGBA_IMAGE:
       predictor       = 2;
       samplesperpixel = 4;
-      bitspersample   = 8;
       photometric     = PHOTOMETRIC_RGB;
-      bytesperrow     = cols * 4;
       alpha           = TRUE;
+      if (bitspersample == 8)
+        {
+          if (tsvals.save_transp_pixels)
+            format    = babl_format ("R'G'B'A u8");
+          else
+            format    = babl_format ("R'aG'aB'aA u8");
+        }
+      else
+        {
+          if (tsvals.save_transp_pixels)
+            format    = babl_format ("R'G'B'A u16");
+          else
+            format    = babl_format ("R'aG'aB'aA u16");
+        }
       break;
 
     case GIMP_GRAYA_IMAGE:
       samplesperpixel = 2;
-      bitspersample   = 8;
       photometric     = PHOTOMETRIC_MINISBLACK;
-      bytesperrow     = cols * 2;
       alpha           = TRUE;
+      if (bitspersample == 8)
+        {
+          if (tsvals.save_transp_pixels)
+            format    = babl_format ("Y'A u8");
+          else
+            format    = babl_format ("Y'aA u8");
+        }
+      else
+        {
+          if (tsvals.save_transp_pixels)
+            format    = babl_format ("Y'A u16");
+          else
+            format    = babl_format ("Y'aA u16");
+        }
       break;
 
     case GIMP_INDEXED_IMAGE:
@@ -801,25 +832,29 @@ save_image (const gchar  *filename,
       samplesperpixel = 1;
       bytesperrow     = cols;
       alpha           = FALSE;
+      format          = gimp_drawable_get_format (layer);
 
       g_free (cmap);
       break;
 
     case GIMP_INDEXEDA_IMAGE:
       g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
-                   "%s",
-                   "TIFF save cannot handle indexed images with alpha channel.");
+                   _("TIFF save cannot handle indexed images with "
+                     "an alpha channel."));
     default:
-      return FALSE;
+      goto out;
     }
+
+  bytesperrow = cols * babl_format_get_bytes_per_pixel (format);
 
   if (compression == COMPRESSION_CCITTFAX3 ||
       compression == COMPRESSION_CCITTFAX4)
     {
       if (bitspersample != 1 || samplesperpixel != 1)
         {
-          g_message ("Only monochrome pictures can be compressed with \"CCITT Group 4\" or \"CCITT Group 3\".");
-          return FALSE;
+          g_message (_("Only monochrome pictures can be compressed with "
+                       "\"CCITT Group 4\" or \"CCITT Group 3\"."));
+          goto out;
         }
     }
 
@@ -970,7 +1005,13 @@ save_image (const gchar  *filename,
       yend = y + tile_height;
       yend = MIN (yend, rows);
 
-      gimp_pixel_rgn_get_rect (&pixel_rgn, src, 0, y, cols, yend - y);
+      gegl_buffer_get (buffer,
+                       GEGL_RECTANGLE (0, y, cols, yend - y),
+                       1.0,
+                       format,
+                       src,
+                       GEGL_AUTO_ROWSTRIDE,
+                       GEGL_ABYSS_NONE);
 
       for (row = y; row < yend; row++)
         {
@@ -991,53 +1032,10 @@ save_image (const gchar  *filename,
               break;
 
             case GIMP_GRAY_IMAGE:
-              success = (TIFFWriteScanline (tif, t, row, 0) >= 0);
-              break;
-
             case GIMP_GRAYA_IMAGE:
-              for (col = 0; col < cols*samplesperpixel; col+=samplesperpixel)
-                {
-                  if (tsvals.save_transp_pixels)
-                    {
-                      data[col + 0] = t[col + 0];
-                    }
-                  else
-                    {
-                      /* pre-multiply gray by alpha */
-                      data[col + 0] = (t[col + 0] * t[col + 1]) / 255;
-                    }
-
-                  data[col + 1] = t[col + 1];  /* alpha channel */
-                }
-
-              success = (TIFFWriteScanline (tif, data, row, 0) >= 0);
-              break;
-
             case GIMP_RGB_IMAGE:
-              success = (TIFFWriteScanline (tif, t, row, 0) >= 0);
-              break;
-
             case GIMP_RGBA_IMAGE:
-              for (col = 0; col < cols*samplesperpixel; col+=samplesperpixel)
-                {
-                  if (tsvals.save_transp_pixels)
-                    {
-                      data[col+0] = t[col + 0];
-                      data[col+1] = t[col + 1];
-                      data[col+2] = t[col + 2];
-                    }
-                  else
-                    {
-                      /* pre-multiply rgb by alpha */
-                      data[col+0] = t[col + 0] * t[col + 3] / 255;
-                      data[col+1] = t[col + 1] * t[col + 3] / 255;
-                      data[col+2] = t[col + 2] * t[col + 3] / 255;
-                    }
-
-                  data[col+3] = t[col + 3];  /* alpha channel */
-                }
-
-              success = (TIFFWriteScanline (tif, data, row, 0) >= 0);
+              success = (TIFFWriteScanline (tif, t, row, 0) >= 0);
               break;
 
             default:
@@ -1047,8 +1045,8 @@ save_image (const gchar  *filename,
 
           if (!success)
             {
-              g_message ("Failed a scanline write on row %d", row);
-              return FALSE;
+              g_message (_("Failed a scanline write on row %d"), row);
+              goto out;
             }
         }
 
@@ -1061,10 +1059,16 @@ save_image (const gchar  *filename,
 
   gimp_progress_update (1.0);
 
-  gimp_drawable_detach (drawable);
-  g_free (data);
+  status = TRUE;
 
-  return TRUE;
+ out:
+  if (buffer)
+    g_object_unref (buffer);
+
+  g_free (data);
+  g_free (src);
+
+  return status;
 }
 
 static gboolean

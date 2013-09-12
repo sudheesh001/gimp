@@ -32,10 +32,10 @@
 
 #include "core/gimp.h"
 #include "core/gimp-utils.h"
-#include "core/gimp-apply-operation.h"
 #include "core/gimpdrawable.h"
 #include "core/gimperror.h"
 #include "core/gimpimage.h"
+#include "core/gimppattern.h"
 #include "core/gimppickable.h"
 
 #include "gimpperspectiveclone.h"
@@ -44,27 +44,29 @@
 #include "gimp-intl.h"
 
 
-static void         gimp_perspective_clone_paint      (GimpPaintCore    *paint_core,
-                                                       GimpDrawable     *drawable,
-                                                       GimpPaintOptions *paint_options,
-                                                       const GimpCoords *coords,
-                                                       GimpPaintState    paint_state,
-                                                       guint32           time);
+static void         gimp_perspective_clone_paint      (GimpPaintCore     *paint_core,
+                                                       GimpDrawable      *drawable,
+                                                       GimpPaintOptions  *paint_options,
+                                                       const GimpCoords  *coords,
+                                                       GimpPaintState     paint_state,
+                                                       guint32            time);
 
-static GeglBuffer * gimp_perspective_clone_get_source (GimpSourceCore   *source_core,
-                                                       GimpDrawable     *drawable,
-                                                       GimpPaintOptions *paint_options,
-                                                       GimpPickable     *src_pickable,
-                                                       gint              src_offset_x,
-                                                       gint              src_offset_y,
-                                                       GeglBuffer       *paint_buffer,
-                                                       gint              paint_buffer_x,
-                                                       gint              paint_buffer_y,
-                                                       gint             *paint_area_offset_x,
-                                                       gint             *paint_area_offset_y,
-                                                       gint             *paint_area_width,
-                                                       gint             *paint_area_height,
-                                                       GeglRectangle    *src_rect);
+static gboolean     gimp_perspective_clone_use_source (GimpSourceCore    *source_core,
+                                                       GimpSourceOptions *options);
+static GeglBuffer * gimp_perspective_clone_get_source (GimpSourceCore    *source_core,
+                                                       GimpDrawable      *drawable,
+                                                       GimpPaintOptions  *paint_options,
+                                                       GimpPickable      *src_pickable,
+                                                       gint               src_offset_x,
+                                                       gint               src_offset_y,
+                                                       GeglBuffer        *paint_buffer,
+                                                       gint               paint_buffer_x,
+                                                       gint               paint_buffer_y,
+                                                       gint              *paint_area_offset_x,
+                                                       gint              *paint_area_offset_y,
+                                                       gint              *paint_area_width,
+                                                       gint              *paint_area_height,
+                                                       GeglRectangle     *src_rect);
 
 static void         gimp_perspective_clone_get_matrix (GimpPerspectiveClone *clone,
                                                        GimpMatrix3          *matrix);
@@ -96,6 +98,7 @@ gimp_perspective_clone_class_init (GimpPerspectiveCloneClass *klass)
 
   paint_core_class->paint       = gimp_perspective_clone_paint;
 
+  source_core_class->use_source = gimp_perspective_clone_use_source;
   source_core_class->get_source = gimp_perspective_clone_get_source;
 }
 
@@ -120,9 +123,11 @@ gimp_perspective_clone_paint (GimpPaintCore    *paint_core,
                               GimpPaintState    paint_state,
                               guint32           time)
 {
-  GimpSourceCore       *source_core = GIMP_SOURCE_CORE (paint_core);
-  GimpPerspectiveClone *clone       = GIMP_PERSPECTIVE_CLONE (paint_core);
-  GimpSourceOptions    *options     = GIMP_SOURCE_OPTIONS (paint_options);
+  GimpSourceCore       *source_core   = GIMP_SOURCE_CORE (paint_core);
+  GimpPerspectiveClone *clone         = GIMP_PERSPECTIVE_CLONE (paint_core);
+  GimpContext          *context       = GIMP_CONTEXT (paint_options);
+  GimpCloneOptions     *clone_options = GIMP_CLONE_OPTIONS (paint_options);
+  GimpSourceOptions    *options       = GIMP_SOURCE_OPTIONS (paint_options);
 
   switch (paint_state)
     {
@@ -145,10 +150,9 @@ gimp_perspective_clone_paint (GimpPaintCore    *paint_core,
         }
       else
         {
-          GimpPickable *src_pickable;
-          GimpImage    *src_image;
-          GimpImage    *dest_image;
-          GeglBuffer   *orig_buffer;
+          GeglBuffer *orig_buffer = NULL;
+          GeglNode   *tile        = NULL;
+          GeglNode   *src_node;
 
           if (options->align_mode == GIMP_SOURCE_ALIGN_NO)
             {
@@ -158,52 +162,76 @@ gimp_perspective_clone_paint (GimpPaintCore    *paint_core,
               source_core->first_stroke = TRUE;
             }
 
-          /*  If the source image is different from the destination,
-           *  then we should copy straight from the source image
-           *  to the canvas.
-           *  Otherwise, we need a call to get_orig_image to make sure
-           *  we get a copy of the unblemished (offset) image
-           */
-          src_pickable = GIMP_PICKABLE (source_core->src_drawable);
-          src_image    = gimp_pickable_get_image (src_pickable);
-
-          if (options->sample_merged)
-            src_pickable = GIMP_PICKABLE (gimp_image_get_projection (src_image));
-
-          dest_image = gimp_item_get_image (GIMP_ITEM (drawable));
-
-          if ((options->sample_merged &&
-               (src_image != dest_image)) ||
-              (! options->sample_merged &&
-               (source_core->src_drawable != drawable)))
-            {
-              orig_buffer = gimp_pickable_get_buffer (src_pickable);
-            }
-          else
-            {
-              if (options->sample_merged)
-                orig_buffer = gimp_paint_core_get_orig_proj (paint_core);
-              else
-                orig_buffer = gimp_paint_core_get_orig_image (paint_core);
-            }
-
           clone->node = gegl_node_new ();
 
           g_object_set (clone->node,
                         "dont-cache", TRUE,
                         NULL);
 
-          clone->src_node =
-            gegl_node_new_child (clone->node,
-                                 "operation", "gegl:buffer-source",
-                                 "buffer",    orig_buffer,
-                                  NULL);
+          switch (clone_options->clone_type)
+            {
+            case GIMP_IMAGE_CLONE:
+              {
+                GimpPickable *src_pickable;
+                GimpImage    *src_image;
+                GimpImage    *dest_image;
+
+                /*  If the source image is different from the
+                 *  destination, then we should copy straight from the
+                 *  source image to the canvas.
+                 *  Otherwise, we need a call to get_orig_image to make sure
+                 *  we get a copy of the unblemished (offset) image
+                 */
+                src_pickable = GIMP_PICKABLE (source_core->src_drawable);
+                src_image    = gimp_pickable_get_image (src_pickable);
+
+                if (options->sample_merged)
+                  src_pickable = GIMP_PICKABLE (gimp_image_get_projection (src_image));
+
+                dest_image = gimp_item_get_image (GIMP_ITEM (drawable));
+
+                if ((options->sample_merged &&
+                     (src_image != dest_image)) ||
+                    (! options->sample_merged &&
+                     (source_core->src_drawable != drawable)))
+                  {
+                    orig_buffer = gimp_pickable_get_buffer (src_pickable);
+                  }
+                else
+                  {
+                    if (options->sample_merged)
+                      orig_buffer = gimp_paint_core_get_orig_proj (paint_core);
+                    else
+                      orig_buffer = gimp_paint_core_get_orig_image (paint_core);
+                  }
+              }
+              break;
+
+            case GIMP_PATTERN_CLONE:
+              {
+                GimpPattern *pattern = gimp_context_get_pattern (context);
+
+                orig_buffer = gimp_pattern_create_buffer (pattern);
+
+                tile = gegl_node_new_child (clone->node,
+                                            "operation", "gegl:tile",
+                                            NULL);
+                clone->crop = gegl_node_new_child (clone->node,
+                                                   "operation", "gegl:crop",
+                                                   NULL);
+              }
+              break;
+            }
+
+          src_node = gegl_node_new_child (clone->node,
+                                          "operation", "gegl:buffer-source",
+                                          "buffer",    orig_buffer,
+                                          NULL);
 
           clone->transform_node =
             gegl_node_new_child (clone->node,
-                                 "operation",  "gegl:transform",
-                                 "filter",     gimp_interpolation_to_gegl_filter (GIMP_INTERPOLATION_LINEAR),
-                                 "hard-edges", TRUE,
+                                 "operation", "gegl:transform",
+                                 "sampler",    GIMP_INTERPOLATION_LINEAR,
                                  NULL);
 
           clone->dest_node =
@@ -211,12 +239,24 @@ gimp_perspective_clone_paint (GimpPaintCore    *paint_core,
                                  "operation", "gegl:write-buffer",
                                  NULL);
 
-          gegl_node_link_many (clone->src_node,
-                               clone->transform_node,
-                               clone->dest_node,
-                               NULL);
+          if (tile)
+            {
+              gegl_node_link_many (src_node,
+                                   tile,
+                                   clone->crop,
+                                   clone->transform_node,
+                                   clone->dest_node,
+                                   NULL);
 
-          clone->processor = gegl_node_new_processor (clone->dest_node, NULL);
+              g_object_unref (orig_buffer);
+            }
+          else
+            {
+              gegl_node_link_many (src_node,
+                                   clone->transform_node,
+                                   clone->dest_node,
+                                   NULL);
+            }
         }
       break;
 
@@ -280,12 +320,10 @@ gimp_perspective_clone_paint (GimpPaintCore    *paint_core,
       if (clone->node)
         {
           g_object_unref (clone->node);
-          g_object_unref (clone->processor);
-          clone->node = NULL;
-          clone->src_node = NULL;
+          clone->node           = NULL;
+          clone->crop           = NULL;
           clone->transform_node = NULL;
-          clone->dest_node = NULL;
-          clone->processor = NULL;
+          clone->dest_node      = NULL;
         }
       break;
 
@@ -295,6 +333,13 @@ gimp_perspective_clone_paint (GimpPaintCore    *paint_core,
 
   g_object_notify (G_OBJECT (clone), "src-x");
   g_object_notify (G_OBJECT (clone), "src-y");
+}
+
+static gboolean
+gimp_perspective_clone_use_source (GimpSourceCore    *source_core,
+                                   GimpSourceOptions *options)
+{
+  return TRUE;
 }
 
 static GeglBuffer *
@@ -313,7 +358,8 @@ gimp_perspective_clone_get_source (GimpSourceCore   *source_core,
                                    gint             *paint_area_height,
                                    GeglRectangle    *src_rect)
 {
-  GimpPerspectiveClone *clone = GIMP_PERSPECTIVE_CLONE (source_core);
+  GimpPerspectiveClone *clone         = GIMP_PERSPECTIVE_CLONE (source_core);
+  GimpCloneOptions     *clone_options = GIMP_CLONE_OPTIONS (paint_options);
   GeglBuffer           *src_buffer;
   GeglBuffer           *dest_buffer;
   const Babl           *src_format_alpha;
@@ -346,15 +392,29 @@ gimp_perspective_clone_get_source (GimpSourceCore   *source_core,
   xmax = ceil  (MAX4 (x1s, x2s, x3s, x4s));
   ymax = ceil  (MAX4 (y1s, y2s, y3s, y4s));
 
-  if (! gimp_rectangle_intersect (xmin, ymin,
-                                  xmax - xmin, ymax - ymin,
-                                  0, 0,
-                                  gegl_buffer_get_width  (src_buffer),
-                                  gegl_buffer_get_height (src_buffer),
-                                  NULL, NULL, NULL, NULL))
+  switch (clone_options->clone_type)
     {
-      /* if the source area is completely out of the image */
-      return FALSE;
+    case GIMP_IMAGE_CLONE:
+      if (! gimp_rectangle_intersect (xmin, ymin,
+                                      xmax - xmin, ymax - ymin,
+                                      0, 0,
+                                      gegl_buffer_get_width  (src_buffer),
+                                      gegl_buffer_get_height (src_buffer),
+                                      NULL, NULL, NULL, NULL))
+        {
+          /* if the source area is completely out of the image */
+          return NULL;
+        }
+      break;
+
+    case GIMP_PATTERN_CLONE:
+      gegl_node_set (clone->crop,
+                     "x",      (gdouble) xmin,
+                     "y",      (gdouble) ymin,
+                     "width",  (gdouble) xmax - xmin,
+                     "height", (gdouble) ymax - ymin,
+                     NULL);
+      break;
     }
 
   dest_buffer = gegl_buffer_new (GEGL_RECTANGLE (0, 0, x2d - x1d, y2d - y1d),
@@ -372,10 +432,9 @@ gimp_perspective_clone_get_source (GimpSourceCore   *source_core,
                  "buffer", dest_buffer,
                  NULL);
 
-  gegl_processor_set_rectangle (clone->processor,
-                                GEGL_RECTANGLE (0, 0,
-                                                x2d - x1d, y2d - y1d));
-  while (gegl_processor_work (clone->processor, NULL));
+  gegl_node_blit (clone->dest_node, 1.0,
+                  GEGL_RECTANGLE (0, 0, x2d - x1d, y2d - y1d),
+                  NULL, NULL, 0, GEGL_BLIT_DEFAULT);
 
   *src_rect = *GEGL_RECTANGLE (0, 0, x2d - x1d, y2d - y1d);
 

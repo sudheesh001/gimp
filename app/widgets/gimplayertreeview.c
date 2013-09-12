@@ -208,17 +208,19 @@ gimp_layer_tree_view_class_init (GimpLayerTreeViewClass *klass)
   item_view_class->remove_item     = (GimpRemoveItemFunc) gimp_image_remove_layer;
   item_view_class->new_item        = gimp_layer_tree_view_item_new;
 
-  item_view_class->action_group        = "layers";
-  item_view_class->activate_action     = "layers-text-tool";
-  item_view_class->edit_action         = "layers-edit-attributes";
-  item_view_class->new_action          = "layers-new";
-  item_view_class->new_default_action  = "layers-new-last-values";
-  item_view_class->raise_action        = "layers-raise";
-  item_view_class->raise_top_action    = "layers-raise-to-top";
-  item_view_class->lower_action        = "layers-lower";
-  item_view_class->lower_bottom_action = "layers-lower-to-bottom";
-  item_view_class->duplicate_action    = "layers-duplicate";
-  item_view_class->delete_action       = "layers-delete";
+  item_view_class->action_group          = "layers";
+  item_view_class->activate_action       = "layers-text-tool";
+  item_view_class->edit_action           = "layers-edit-attributes";
+  item_view_class->new_action            = "layers-new";
+  item_view_class->new_default_action    = "layers-new-last-values";
+  item_view_class->raise_action          = "layers-raise";
+  item_view_class->raise_top_action      = "layers-raise-to-top";
+  item_view_class->lower_action          = "layers-lower";
+  item_view_class->lower_bottom_action   = "layers-lower-to-bottom";
+  item_view_class->duplicate_action      = "layers-duplicate";
+  item_view_class->delete_action         = "layers-delete";
+  item_view_class->lock_content_help_id  = GIMP_HELP_LAYER_LOCK_PIXELS;
+  item_view_class->lock_position_help_id = GIMP_HELP_LAYER_LOCK_POSITION;
 
   g_type_class_add_private (klass, sizeof (GimpLayerTreeViewPriv));
 }
@@ -304,8 +306,9 @@ gimp_layer_tree_view_init (GimpLayerTreeView *view)
                     G_CALLBACK (gimp_layer_tree_view_lock_alpha_button_toggled),
                     view);
 
-  gimp_help_set_help_data (view->priv->lock_alpha_toggle, _("Lock alpha channel"),
-                           GIMP_HELP_LAYER_DIALOG_LOCK_ALPHA_BUTTON);
+  gimp_help_set_help_data (view->priv->lock_alpha_toggle,
+                           _("Lock alpha channel"),
+                           GIMP_HELP_LAYER_LOCK_ALPHA);
 
   gtk_widget_style_get (GTK_WIDGET (view),
                         "button-icon-size", &icon_size,
@@ -335,8 +338,7 @@ gimp_layer_tree_view_constructed (GObject *object)
   GimpLayerTreeView     *layer_view = GIMP_LAYER_TREE_VIEW (object);
   GtkWidget             *button;
 
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   layer_view->priv->mask_cell = gimp_cell_renderer_viewable_new ();
   gtk_tree_view_column_pack_start (tree_view->main_column,
@@ -366,9 +368,9 @@ gimp_layer_tree_view_constructed (GObject *object)
                                NULL, tree_view);
   gimp_dnd_viewable_dest_add  (GTK_WIDGET (tree_view->view), GIMP_TYPE_LAYER_MASK,
                                NULL, tree_view);
-  gimp_dnd_pixbuf_dest_add    (GTK_WIDGET (tree_view->view),
-                               NULL, tree_view);
   gimp_dnd_uri_list_dest_add  (GTK_WIDGET (tree_view->view),
+                               NULL, tree_view);
+  gimp_dnd_pixbuf_dest_add    (GTK_WIDGET (tree_view->view),
                                NULL, tree_view);
 
   /*  hide basically useless edit button  */

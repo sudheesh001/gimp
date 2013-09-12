@@ -40,7 +40,7 @@ static void   gimp_item_stack_remove      (GimpContainer *container,
                                            GimpObject    *object);
 
 
-G_DEFINE_TYPE (GimpItemStack, gimp_item_stack, GIMP_TYPE_LIST)
+G_DEFINE_TYPE (GimpItemStack, gimp_item_stack, GIMP_TYPE_FILTER_STACK)
 
 #define parent_class gimp_item_stack_parent_class
 
@@ -67,8 +67,7 @@ gimp_item_stack_constructed (GObject *object)
 {
   GimpContainer *container = GIMP_CONTAINER (object);
 
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   g_assert (g_type_is_a (gimp_container_get_children_type (container),
                          GIMP_TYPE_ITEM));

@@ -76,10 +76,21 @@ gimp_language_store_init (GimpLanguageStore *store)
 static void
 gimp_language_store_constructed (GObject *object)
 {
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  GHashTable     *lang_list;
+  GHashTableIter  lang_iter;
+  gpointer        code;
+  gpointer        name;
 
-  gimp_language_store_parse_iso_codes (GIMP_LANGUAGE_STORE (object), NULL);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
+
+  lang_list = gimp_language_store_parser_get_languages (FALSE);
+  g_return_if_fail (lang_list != NULL);
+
+  g_hash_table_iter_init (&lang_iter, lang_list);
+
+  while (g_hash_table_iter_next (&lang_iter, &code, &name))
+    GIMP_LANGUAGE_STORE_GET_CLASS (object)->add (GIMP_LANGUAGE_STORE (object),
+                                                 name, code);
 }
 
 static void
@@ -110,10 +121,10 @@ gimp_language_store_sort (GtkTreeModel *model,
   gtk_tree_model_get_value (model, a, GIMP_LANGUAGE_STORE_CODE, &avalue);
   gtk_tree_model_get_value (model, b, GIMP_LANGUAGE_STORE_CODE, &bvalue);
 
-  if (! g_value_get_string (&avalue))
+  if (g_strcmp0 ("", g_value_get_string (&avalue)) == 0)
     cmp = -1;
 
-  if (! g_value_get_string (&bvalue))
+  if (g_strcmp0 ("", g_value_get_string (&bvalue)) == 0)
     cmp = 1;
 
   g_value_unset (&avalue);
@@ -139,17 +150,6 @@ GtkListStore *
 gimp_language_store_new (void)
 {
   return g_object_new (GIMP_TYPE_LANGUAGE_STORE, NULL);
-}
-
-void
-gimp_language_store_add (GimpLanguageStore *store,
-                         const gchar       *label,
-                         const gchar       *code)
-{
-  g_return_if_fail (GIMP_IS_LANGUAGE_STORE (store));
-  g_return_if_fail (label != NULL);
-
-  GIMP_LANGUAGE_STORE_GET_CLASS (store)->add (store, label, code);
 }
 
 gboolean

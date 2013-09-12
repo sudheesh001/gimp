@@ -55,7 +55,7 @@ static struct
   RGBMode rgb_format;
   gint    use_run_length_encoding;
 
-  /* Weather or not to write BITMAPV5HEADER color space data */
+  /* Whether or not to write BITMAPV5HEADER color space data */
   gint    dont_write_color_space_data;
 } BMPSaveData;
 
@@ -154,24 +154,27 @@ WriteBMP (const gchar  *filename,
   glong          BitsPerPixel;
   gint           colors;
   guchar        *pixels;
-  GimpPixelRgn   pixel_rgn;
-  GimpDrawable  *drawable;
+  GeglBuffer    *buffer;
+  const Babl    *format;
   GimpImageType  drawable_type;
+  gint           drawable_width;
+  gint           drawable_height;
   guchar         puffer[128];
   gint           i;
   gint           mask_info_size;
   gint           color_space_size;
   guint32        Mask[4];
 
-  drawable = gimp_drawable_get (drawable_ID);
-  drawable_type = gimp_drawable_type (drawable_ID);
+  buffer = gimp_drawable_get_buffer (drawable_ID);
 
-  gimp_pixel_rgn_init (&pixel_rgn, drawable,
-                       0, 0, drawable->width, drawable->height, FALSE, FALSE);
+  drawable_type   = gimp_drawable_type   (drawable_ID);
+  drawable_width  = gimp_drawable_width  (drawable_ID);
+  drawable_height = gimp_drawable_height (drawable_ID);
 
   switch (drawable_type)
     {
     case GIMP_RGBA_IMAGE:
+      format       = babl_format ("R'G'B'A u8");
       colors       = 0;
       BitsPerPixel = 32;
       MapSize      = 0;
@@ -180,6 +183,7 @@ WriteBMP (const gchar  *filename,
       break;
 
     case GIMP_RGB_IMAGE:
+      format       = babl_format ("R'G'B' u8");
       colors       = 0;
       BitsPerPixel = 24;
       MapSize      = 0;
@@ -189,9 +193,9 @@ WriteBMP (const gchar  *filename,
 
     case GIMP_GRAYA_IMAGE:
       if (interactive && !warning_dialog (_("Cannot save indexed image with "
-    					    "transparency in BMP file format."),
+                                            "transparency in BMP file format."),
                                           _("Alpha channel will be ignored.")))
-          return GIMP_PDB_CANCEL;
+        return GIMP_PDB_CANCEL;
 
      /* fallthrough */
 
@@ -201,9 +205,15 @@ WriteBMP (const gchar  *filename,
       MapSize      = 1024;
 
       if (drawable_type == GIMP_GRAYA_IMAGE)
-        channels = 2;
+        {
+          format   = babl_format ("Y'A u8");
+          channels = 2;
+        }
       else
-        channels = 1;
+        {
+          format   = babl_format ("Y' u8");
+          channels = 1;
+        }
 
       for (i = 0; i < colors; i++)
         {
@@ -215,13 +225,14 @@ WriteBMP (const gchar  *filename,
 
     case GIMP_INDEXEDA_IMAGE:
       if (interactive && !warning_dialog (_("Cannot save indexed image with "
-    			                    "transparency in BMP file format."),
+                                            "transparency in BMP file format."),
                                           _("Alpha channel will be ignored.")))
-          return GIMP_PDB_CANCEL;
+        return GIMP_PDB_CANCEL;
 
      /* fallthrough */
 
     case GIMP_INDEXED_IMAGE:
+      format   = gimp_drawable_get_format (drawable_ID);
       cmap     = gimp_image_get_colormap (image, &colors);
       MapSize  = 4 * colors;
 
@@ -268,6 +279,7 @@ WriteBMP (const gchar  *filename,
       if (interactive && !save_dialog (channels))
         return GIMP_PDB_CANCEL;
 
+      /* mask_info_size is only set to non-zero for 16- and 32-bpp */
       switch (BMPSaveData.rgb_format)
         {
         case RGB_888:
@@ -275,6 +287,7 @@ WriteBMP (const gchar  *filename,
           break;
         case RGBA_8888:
           BitsPerPixel = 32;
+          mask_info_size = 16;
           break;
         case RGBX_8888:
           BitsPerPixel = 32;
@@ -290,6 +303,7 @@ WriteBMP (const gchar  *filename,
           break;
         case RGB_555:
           BitsPerPixel = 16;
+          mask_info_size = 16;
           break;
         default:
           g_return_val_if_reached (GIMP_PDB_EXECUTION_ERROR);
@@ -309,20 +323,25 @@ WriteBMP (const gchar  *filename,
     }
 
   /* fetch the image */
-  pixels = g_new (guchar, drawable->width * drawable->height * channels);
-  gimp_pixel_rgn_get_rect (&pixel_rgn, pixels,
-                           0, 0, drawable->width, drawable->height);
+  pixels = g_new (guchar, drawable_width * drawable_height * channels);
+
+  gegl_buffer_get (buffer, GEGL_RECTANGLE (0, 0,
+                                           drawable_width, drawable_height), 1.0,
+                   format, pixels,
+                   GEGL_AUTO_ROWSTRIDE, GEGL_ABYSS_NONE);
+
+  g_object_unref (buffer);
 
   /* And let's begin the progress */
   gimp_progress_init_printf (_("Saving '%s'"),
                              gimp_filename_to_utf8 (filename));
 
   cur_progress = 0;
-  max_progress = drawable->height;
+  max_progress = drawable_height;
 
   /* Now, we need some further information ... */
-  cols = drawable->width;
-  rows = drawable->height;
+  cols = drawable_width;
+  rows = drawable_height;
 
   /* ... that we write to our headers. */
   if ((BitsPerPixel <= 8) && (cols % (8 / BitsPerPixel)))
@@ -437,17 +456,17 @@ WriteBMP (const gchar  *filename,
         default:
         case RGB_888:
         case RGBX_8888:
-          Mask[0] = 0xff000000;
-          Mask[1] = 0x00ff0000;
-          Mask[2] = 0x0000ff00;
+          Mask[0] = 0x00ff0000;
+          Mask[1] = 0x0000ff00;
+          Mask[2] = 0x000000ff;
           Mask[3] = 0x00000000;
           break;
 
         case RGBA_8888:
-          Mask[0] = 0xff000000;
-          Mask[1] = 0x00ff0000;
-          Mask[2] = 0x0000ff00;
-          Mask[3] = 0x000000ff;
+          Mask[0] = 0x00ff0000;
+          Mask[1] = 0x0000ff00;
+          Mask[2] = 0x000000ff;
+          Mask[3] = 0xff000000;
           break;
 
         case RGB_565:
@@ -527,7 +546,6 @@ WriteBMP (const gchar  *filename,
   /* ... and exit normally */
 
   fclose (outfile);
-  gimp_drawable_detach (drawable);
   g_free (pixels);
 
   return GIMP_PDB_SUCCESS;
@@ -599,10 +617,10 @@ write_image (FILE   *f,
                   Write (f, buf, 3);
                   break;
                 case RGBX_8888:
-                  buf[0] = 0;
-                  buf[3] = *temp++;
                   buf[2] = *temp++;
                   buf[1] = *temp++;
+                  buf[0] = *temp++;
+                  buf[3] = 0;
                   xpos++;
                   if (channels > 3 && (guchar) *temp == 0)
                     buf[0] = buf[1] = buf[2] = 0xff;

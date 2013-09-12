@@ -36,6 +36,7 @@
 
 #include "display/gimpdisplay.h"
 #include "display/gimpdisplayshell.h"
+#include "display/gimptoolgui.h"
 
 #include "gimpscaletool.h"
 #include "gimptoolcontrol.h"
@@ -139,7 +140,7 @@ gimp_scale_tool_dialog_update (GimpTransformTool *tr_tool)
   g_object_set (GIMP_SCALE_TOOL (tr_tool)->box,
                 "width",       width,
                 "height",      height,
-                "keep-aspect", options->constrain,
+                "keep-aspect", options->constrain_scale,
                 NULL);
 }
 
@@ -175,14 +176,13 @@ gimp_scale_tool_prepare (GimpTransformTool *tr_tool)
     g_object_new (GIMP_TYPE_SIZE_BOX,
                   "width",       tr_tool->x2 - tr_tool->x1,
                   "height",      tr_tool->y2 - tr_tool->y1,
-                  "keep-aspect", options->constrain,
+                  "keep-aspect", options->constrain_scale,
                   "unit",        gimp_display_get_shell (display)->unit,
                   "xresolution", xres,
                   "yresolution", yres,
                   NULL);
 
-  gtk_container_set_border_width (GTK_CONTAINER (scale->box), 6);
-  gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (tr_tool->dialog))),
+  gtk_box_pack_start (GTK_BOX (gimp_tool_gui_get_vbox (tr_tool->gui)),
                       scale->box, FALSE, FALSE, 0);
   gtk_widget_show (scale->box);
 
@@ -267,7 +267,7 @@ gimp_scale_tool_motion (GimpTransformTool *tr_tool)
   *y1 += diff_y;
 
   /*  if control is being held, constrain the aspect ratio  */
-  if (options->constrain)
+  if (options->constrain_scale)
     {
       /*  FIXME: improve this  */
       gdouble h = tr_tool->trans_info[Y1] - tr_tool->trans_info[Y0];
@@ -369,6 +369,8 @@ gimp_scale_tool_size_notify (GtkWidget         *box,
           tr_tool->trans_info[X1] = tr_tool->trans_info[X0] + width;
           tr_tool->trans_info[Y1] = tr_tool->trans_info[Y0] + height;
 
+          gimp_transform_tool_push_internal_undo (tr_tool);
+
           gimp_transform_tool_recalc_matrix (tr_tool);
 
           gimp_draw_tool_resume (GIMP_DRAW_TOOL (tr_tool));
@@ -382,7 +384,7 @@ gimp_scale_tool_size_notify (GtkWidget         *box,
                     "keep-aspect", &constrain,
                     NULL);
 
-      if (constrain != options->constrain)
+      if (constrain != options->constrain_scale)
         {
           gint width;
           gint height;
@@ -398,7 +400,7 @@ gimp_scale_tool_size_notify (GtkWidget         *box,
           tr_tool->aspect = (gdouble) width / (gdouble) height;
 
           g_object_set (options,
-                        "constrain", constrain,
+                        "constrain-scale", constrain,
                         NULL);
         }
     }

@@ -36,6 +36,7 @@
 #include "config/gimpdisplayoptions.h"
 
 #include "core/gimp.h"
+#include "core/gimp-utils.h"
 #include "core/gimpchannel.h"
 #include "core/gimpcontext.h"
 #include "core/gimpimage.h"
@@ -67,6 +68,7 @@
 #include "gimpdisplayshell-items.h"
 #include "gimpdisplayshell-progress.h"
 #include "gimpdisplayshell-render.h"
+#include "gimpdisplayshell-rotate.h"
 #include "gimpdisplayshell-scale.h"
 #include "gimpdisplayshell-scroll.h"
 #include "gimpdisplayshell-selection.h"
@@ -81,6 +83,14 @@
 #include "gimp-log.h"
 
 #include "gimp-intl.h"
+
+
+/*  halfway between G_PRIORITY_HIGH_IDLE and G_PRIORITY_DEFAULT_IDLE - 1,
+ *  so a bit higher than projection construction
+ */
+#define GIMP_DISPLAY_SHELL_FILL_IDLE_PRIORITY \
+        ((G_PRIORITY_HIGH_IDLE + G_PRIORITY_DEFAULT_IDLE) / 2 - 1)
+
 
 enum
 {
@@ -97,6 +107,7 @@ enum
 {
   SCALED,
   SCROLLED,
+  ROTATED,
   RECONNECT,
   LAST_SIGNAL
 };
@@ -136,6 +147,7 @@ static void      gimp_display_shell_screen_changed (GtkWidget        *widget,
 static gboolean  gimp_display_shell_popup_menu     (GtkWidget        *widget);
 
 static void      gimp_display_shell_real_scaled    (GimpDisplayShell *shell);
+static void      gimp_display_shell_real_rotated   (GimpDisplayShell *shell);
 
 static const guint8 * gimp_display_shell_get_icc_profile
                                                    (GimpColorManaged *managed,
@@ -205,6 +217,15 @@ gimp_display_shell_class_init (GimpDisplayShellClass *klass)
                   gimp_marshal_VOID__VOID,
                   G_TYPE_NONE, 0);
 
+  display_shell_signals[ROTATED] =
+    g_signal_new ("rotated",
+                  G_TYPE_FROM_CLASS (klass),
+                  G_SIGNAL_RUN_FIRST,
+                  G_STRUCT_OFFSET (GimpDisplayShellClass, rotated),
+                  NULL, NULL,
+                  gimp_marshal_VOID__VOID,
+                  G_TYPE_NONE, 0);
+
   display_shell_signals[RECONNECT] =
     g_signal_new ("reconnect",
                   G_TYPE_FROM_CLASS (klass),
@@ -226,6 +247,7 @@ gimp_display_shell_class_init (GimpDisplayShellClass *klass)
 
   klass->scaled                    = gimp_display_shell_real_scaled;
   klass->scrolled                  = NULL;
+  klass->rotated                   = gimp_display_shell_real_rotated;
   klass->reconnect                 = NULL;
 
   g_object_class_install_property (object_class, PROP_POPUP_MANAGER,
@@ -286,20 +308,11 @@ gimp_display_shell_init (GimpDisplayShell *shell)
   shell->dot_for_dot = TRUE;
   shell->scale_x     = 1.0;
   shell->scale_y     = 1.0;
-  shell->x_dest_inc  = 1;
-  shell->y_dest_inc  = 1;
-  shell->x_src_dec   = 1;
-  shell->y_src_dec   = 1;
-
-  shell->render_surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32,
-                                                      GIMP_DISPLAY_RENDER_BUF_WIDTH,
-                                                      GIMP_DISPLAY_RENDER_BUF_HEIGHT);
 
   gimp_display_shell_items_init (shell);
 
   shell->icon_size  = 32;
 
-  shell->cursor_format     = GIMP_CURSOR_FORMAT_BITMAP;
   shell->cursor_handedness = GIMP_HANDEDNESS_RIGHT;
   shell->current_cursor    = (GimpCursorType) -1;
   shell->tool_cursor       = GIMP_TOOL_CURSOR_NONE;
@@ -364,8 +377,7 @@ gimp_display_shell_constructed (GObject *object)
   gint                   shell_width;
   gint                   shell_height;
 
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   g_assert (GIMP_IS_UI_MANAGER (shell->popup_manager));
   g_assert (GIMP_IS_DISPLAY (shell->display));
@@ -562,9 +574,6 @@ gimp_display_shell_constructed (GObject *object)
   g_signal_connect (shell->canvas, "expose-event",
                     G_CALLBACK (gimp_display_shell_canvas_expose),
                     shell);
-  g_signal_connect_after (shell->canvas, "expose-event",
-                          G_CALLBACK (gimp_display_shell_canvas_expose_after),
-                          shell);
 
   g_signal_connect (shell->canvas, "enter-notify-event",
                     G_CALLBACK (gimp_display_shell_canvas_tool_events),
@@ -738,9 +747,14 @@ gimp_display_shell_constructed (GObject *object)
     }
   else
     {
+#if 0
+      /* Disabled because it sets GDK_POINTER_MOTION_HINT on
+       * shell->canvas. For info see Bug 677375
+       */
       gimp_help_set_help_data (shell->canvas,
                                _("Drop image files here to open them"),
                                NULL);
+#endif
 
       gimp_statusbar_empty (GIMP_STATUSBAR (shell->statusbar));
     }
@@ -759,7 +773,8 @@ gimp_display_shell_dispose (GObject *object)
 
   shell->popup_manager = NULL;
 
-  gimp_display_shell_selection_free (shell);
+  if (shell->selection)
+    gimp_display_shell_selection_free (shell);
 
   if (shell->filter_stack)
     gimp_display_shell_filter_set (shell, NULL);
@@ -768,12 +783,6 @@ gimp_display_shell_dispose (GObject *object)
     {
       g_source_remove (shell->filter_idle_id);
       shell->filter_idle_id = 0;
-    }
-
-  if (shell->render_surface)
-    {
-      cairo_surface_destroy (shell->render_surface);
-      shell->render_surface = NULL;
     }
 
   if (shell->mask_surface)
@@ -843,6 +852,12 @@ gimp_display_shell_finalize (GObject *object)
   GimpDisplayShell *shell = GIMP_DISPLAY_SHELL (object);
 
   g_object_unref (shell->zoom);
+
+  if (shell->rotate_transform)
+    g_free (shell->rotate_transform);
+
+  if (shell->rotate_untransform)
+    g_free (shell->rotate_untransform);
 
   if (shell->options)
     g_object_unref (shell->options);
@@ -1005,6 +1020,20 @@ gimp_display_shell_real_scaled (GimpDisplayShell *shell)
     gimp_ui_manager_update (shell->popup_manager, shell->display);
 }
 
+static void
+gimp_display_shell_real_rotated (GimpDisplayShell *shell)
+{
+  GimpContext *user_context;
+
+  if (! shell->display)
+    return;
+
+  user_context = gimp_get_user_context (shell->display->gimp);
+
+  if (shell->display == gimp_context_get_display (user_context))
+    gimp_ui_manager_update (shell->popup_manager, shell->display);
+}
+
 static const guint8 *
 gimp_display_shell_get_icc_profile (GimpColorManaged *managed,
                                     gsize            *len)
@@ -1050,31 +1079,6 @@ gimp_display_shell_sync_config (GimpDisplayShell  *shell,
                     G_OBJECT (shell->options), 0);
   gimp_config_sync (G_OBJECT (config->default_fullscreen_view),
                     G_OBJECT (shell->fullscreen_options), 0);
-
-  if (shell->display && gimp_display_get_shell (shell->display))
-    {
-      /*  if the shell is already fully constructed, use proper API
-       *  so the actions are updated accordingly.
-       */
-      gimp_display_shell_set_snap_to_guides  (shell,
-                                              config->default_snap_to_guides);
-      gimp_display_shell_set_snap_to_grid    (shell,
-                                              config->default_snap_to_grid);
-      gimp_display_shell_set_snap_to_canvas  (shell,
-                                              config->default_snap_to_canvas);
-      gimp_display_shell_set_snap_to_vectors (shell,
-                                              config->default_snap_to_path);
-    }
-  else
-    {
-      /*  otherwise the shell is currently being constructed and
-       *  display->shell is NULL.
-       */
-      shell->snap_to_guides  = config->default_snap_to_guides;
-      shell->snap_to_grid    = config->default_snap_to_grid;
-      shell->snap_to_canvas  = config->default_snap_to_canvas;
-      shell->snap_to_vectors = config->default_snap_to_path;
-    }
 }
 
 static void
@@ -1298,11 +1302,14 @@ gimp_display_shell_reconnect (GimpDisplayShell *shell)
 void
 gimp_display_shell_empty (GimpDisplayShell *shell)
 {
-  GimpContext *user_context;
+  GimpContext     *user_context;
+  GimpImageWindow *window;
 
   g_return_if_fail (GIMP_IS_DISPLAY_SHELL (shell));
   g_return_if_fail (GIMP_IS_DISPLAY (shell->display));
   g_return_if_fail (gimp_display_get_image (shell->display) == NULL);
+
+  window = gimp_display_shell_get_window (shell);
 
   if (shell->fill_idle_id)
     {
@@ -1314,15 +1321,19 @@ gimp_display_shell_empty (GimpDisplayShell *shell)
 
   gimp_display_shell_unset_cursor (shell);
 
-  gimp_display_shell_appearance_update (shell);
+  gimp_display_shell_sync_config (shell, shell->display->config);
 
+  gimp_display_shell_appearance_update (shell);
+  gimp_image_window_update_tabs (window);
+#if 0
   gimp_help_set_help_data (shell->canvas,
                            _("Drop image files here to open them"), NULL);
+#endif
 
   gimp_statusbar_empty (GIMP_STATUSBAR (shell->statusbar));
 
-  /*  so wilber doesn't flicker  */
-  gtk_widget_set_double_buffered (shell->canvas, TRUE);
+  shell->rotate_angle = 0.0;
+  gimp_display_shell_rotate_update_transform (shell);
 
   gimp_display_shell_expose_full (shell);
 
@@ -1355,9 +1366,13 @@ gimp_display_shell_fill (GimpDisplayShell *shell,
                          GimpUnit          unit,
                          gdouble           scale)
 {
+  GimpImageWindow *window;
+
   g_return_if_fail (GIMP_IS_DISPLAY_SHELL (shell));
   g_return_if_fail (GIMP_IS_DISPLAY (shell->display));
   g_return_if_fail (GIMP_IS_IMAGE (image));
+
+  window = gimp_display_shell_get_window (shell);
 
   gimp_display_shell_set_unit (shell, unit);
   gimp_display_shell_set_initial_scale (shell, scale, NULL, NULL);
@@ -1366,8 +1381,10 @@ gimp_display_shell_fill (GimpDisplayShell *shell,
   gimp_display_shell_sync_config (shell, shell->display->config);
 
   gimp_display_shell_appearance_update (shell);
-
+  gimp_image_window_update_tabs (window);
+#if 0
   gimp_help_set_help_data (shell->canvas, NULL, NULL);
+#endif
 
   gimp_statusbar_fill (GIMP_STATUSBAR (shell->statusbar));
 
@@ -1378,12 +1395,10 @@ gimp_display_shell_fill (GimpDisplayShell *shell,
                                                                 TRUE,
                                                                 TRUE);
 
-  /*  we double buffer image drawing manually  */
-  gtk_widget_set_double_buffered (shell->canvas, FALSE);
-
-  shell->fill_idle_id = g_idle_add_full (G_PRIORITY_LOW,
-                                         (GSourceFunc) gimp_display_shell_fill_idle,
-                                         shell, NULL);
+  shell->fill_idle_id =
+    g_idle_add_full (GIMP_DISPLAY_SHELL_FILL_IDLE_PRIORITY,
+                     (GSourceFunc) gimp_display_shell_fill_idle, shell,
+                     NULL);
 }
 
 /* We used to calculate the scale factor in the SCALEFACTOR_X() and
@@ -1406,27 +1421,11 @@ gimp_display_shell_scale_changed (GimpDisplayShell *shell)
                                                   gimp_zoom_model_get_factor (shell->zoom),
                                                   &shell->scale_x,
                                                   &shell->scale_y);
-
-      shell->x_dest_inc = gimp_image_get_width  (image);
-      shell->y_dest_inc = gimp_image_get_height (image);
-      shell->x_src_dec  = shell->scale_x * shell->x_dest_inc;
-      shell->y_src_dec  = shell->scale_y * shell->y_dest_inc;
-
-      if (shell->x_src_dec < 1)
-        shell->x_src_dec = 1;
-
-      if (shell->y_src_dec < 1)
-        shell->y_src_dec = 1;
     }
   else
     {
       shell->scale_x = 1.0;
       shell->scale_y = 1.0;
-
-      shell->x_dest_inc = 1;
-      shell->y_dest_inc = 1;
-      shell->x_src_dec  = 1;
-      shell->y_src_dec  = 1;
     }
 }
 
@@ -1436,6 +1435,8 @@ gimp_display_shell_scaled (GimpDisplayShell *shell)
   GList *list;
 
   g_return_if_fail (GIMP_IS_DISPLAY_SHELL (shell));
+
+  gimp_display_shell_rotate_update_transform (shell);
 
   for (list = shell->children; list; list = g_list_next (list))
     {
@@ -1458,6 +1459,8 @@ gimp_display_shell_scrolled (GimpDisplayShell *shell)
 
   g_return_if_fail (GIMP_IS_DISPLAY_SHELL (shell));
 
+  gimp_display_shell_rotate_update_transform (shell);
+
   for (list = shell->children; list; list = g_list_next (list))
     {
       GtkWidget *child = list->data;
@@ -1470,6 +1473,16 @@ gimp_display_shell_scrolled (GimpDisplayShell *shell)
     }
 
   g_signal_emit (shell, display_shell_signals[SCROLLED], 0);
+}
+
+void
+gimp_display_shell_rotated (GimpDisplayShell *shell)
+{
+  g_return_if_fail (GIMP_IS_DISPLAY_SHELL (shell));
+
+  gimp_display_shell_rotate_update_transform (shell);
+
+  g_signal_emit (shell, display_shell_signals[ROTATED], 0);
 }
 
 void
@@ -1599,6 +1612,8 @@ gimp_display_shell_mask_bounds (GimpDisplayShell *shell,
   GimpLayer *layer;
   gdouble    x1_f, y1_f;
   gdouble    x2_f, y2_f;
+  gdouble    x3_f, y3_f;
+  gdouble    x4_f, y4_f;
 
   g_return_val_if_fail (GIMP_IS_DISPLAY_SHELL (shell), FALSE);
   g_return_val_if_fail (x1 != NULL, FALSE);
@@ -1639,13 +1654,15 @@ gimp_display_shell_mask_bounds (GimpDisplayShell *shell,
     }
 
   gimp_display_shell_transform_xy_f (shell, *x1, *y1, &x1_f, &y1_f);
-  gimp_display_shell_transform_xy_f (shell, *x2, *y2, &x2_f, &y2_f);
+  gimp_display_shell_transform_xy_f (shell, *x1, *y2, &x2_f, &y2_f);
+  gimp_display_shell_transform_xy_f (shell, *x2, *y1, &x3_f, &y3_f);
+  gimp_display_shell_transform_xy_f (shell, *x2, *y2, &x4_f, &y4_f);
 
   /*  Make sure the extents are within bounds  */
-  *x1 = CLAMP (floor (x1_f), 0, shell->disp_width);
-  *y1 = CLAMP (floor (y1_f), 0, shell->disp_height);
-  *x2 = CLAMP (ceil (x2_f),  0, shell->disp_width);
-  *y2 = CLAMP (ceil (y2_f),  0, shell->disp_height);
+  *x1 = CLAMP (floor (MIN4 (x1_f, x2_f, x3_f, x4_f)), 0, shell->disp_width);
+  *y1 = CLAMP (floor (MIN4 (y1_f, y2_f, y3_f, y4_f)), 0, shell->disp_height);
+  *x2 = CLAMP (ceil (MAX4 (x1_f, x2_f, x3_f, x4_f)),  0, shell->disp_width);
+  *y2 = CLAMP (ceil (MAX4 (y1_f, y2_f, y3_f, y4_f)),  0, shell->disp_height);
 
   return ((*x2 - *x1) > 0) && ((*y2 - *y1) > 0);
 }
@@ -1748,7 +1765,7 @@ gimp_display_shell_resume (GimpDisplayShell *shell)
  * @shell:     a #GimpDisplayShell
  * @highlight: a rectangle in image coordinates that should be brought out
  *
- * This function allows to set an area of the image that should be
+ * This function sets an area of the image that should be
  * accentuated. The actual implementation is to dim all pixels outside
  * this rectangle. Passing %NULL for @highlight unsets the rectangle.
  **/
@@ -1784,19 +1801,17 @@ gimp_display_shell_set_highlight (GimpDisplayShell   *shell,
  * @mask:  a #GimpDrawable (1 byte per pixel)
  * @color: the color to use for drawing the mask
  *
- * Allows to preview a selection (used by the foreground selection
- * tool).  Pixels that are not selected (> 127) in the mask are tinted
- * with the given color.
+ * Previews a selection (used by the foreground selection tool).
+ * Pixels that are not selected (> 127) in the mask are tinted with
+ * the given color.
  **/
 void
 gimp_display_shell_set_mask (GimpDisplayShell *shell,
-                             GimpDrawable     *mask,
+                             GeglBuffer       *mask,
                              const GimpRGB    *color)
 {
   g_return_if_fail (GIMP_IS_DISPLAY_SHELL (shell));
-  g_return_if_fail (mask == NULL ||
-                    (GIMP_IS_DRAWABLE (mask) &&
-                     babl_format_get_bytes_per_pixel (gimp_drawable_get_format (mask)) == 1));
+  g_return_if_fail (mask == NULL || GEGL_IS_BUFFER (mask));
   g_return_if_fail (mask == NULL || color != NULL);
 
   if (mask)

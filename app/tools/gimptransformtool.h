@@ -22,12 +22,14 @@
 #include "gimpdrawtool.h"
 
 
-#define TRANS_INFO_SIZE  8
-
 typedef enum
 {
   TRANSFORM_CREATING,
   TRANSFORM_HANDLE_NONE,
+  TRANSFORM_HANDLE_NW_P, /* perspective handles */
+  TRANSFORM_HANDLE_NE_P,
+  TRANSFORM_HANDLE_SW_P,
+  TRANSFORM_HANDLE_SE_P,
   TRANSFORM_HANDLE_NW, /* north west */
   TRANSFORM_HANDLE_NE, /* north east */
   TRANSFORM_HANDLE_SW, /* south west */
@@ -36,8 +38,23 @@ typedef enum
   TRANSFORM_HANDLE_S,  /* south      */
   TRANSFORM_HANDLE_E,  /* east       */
   TRANSFORM_HANDLE_W,  /* west       */
-  TRANSFORM_HANDLE_CENTER
+  TRANSFORM_HANDLE_CENTER, /* for moving */
+  TRANSFORM_HANDLE_PIVOT,  /* pivot for rotation and scaling */
+  TRANSFORM_HANDLE_N_S,  /* shearing handles */
+  TRANSFORM_HANDLE_S_S,
+  TRANSFORM_HANDLE_E_S,
+  TRANSFORM_HANDLE_W_S,
+  TRANSFORM_HANDLE_ROTATION, /* rotation handle */
+
+  TRANSFORM_HANDLE_NUM /* keep this last so *handles[] is the right size */
 } TransformAction;
+
+
+/* This is not the number of items in the enum above, but the max size
+ * of the enums at the top of each transformation tool, stored in
+ * trans_info and related
+ */
+#define TRANS_INFO_SIZE 10
 
 typedef gdouble TransInfo[TRANS_INFO_SIZE];
 
@@ -64,9 +81,16 @@ struct _GimpTransformTool
   gdouble         lastx;           /*  last x coord                      */
   gdouble         lasty;           /*  last y coord                      */
 
+  gdouble         previousx;       /*  previous x coord                  */
+  gdouble         previousy;       /*  previous y coord                  */
+
+  gdouble         mousex;          /*  x coord where mouse was clicked   */
+  gdouble         mousey;          /*  y coord where mouse was clicked   */
+
   gint            x1, y1;          /*  upper left hand coordinate        */
   gint            x2, y2;          /*  lower right hand coords           */
-  gdouble         cx, cy;          /*  center point (for rotation)       */
+  gdouble         cx, cy;          /*  center point (for moving)         */
+  gdouble         px, py;          /*  pivot point (for rotation/scaling)*/
   gdouble         aspect;          /*  original aspect ratio             */
 
   gdouble         tx1, ty1;        /*  transformed handle coords         */
@@ -74,11 +98,17 @@ struct _GimpTransformTool
   gdouble         tx3, ty3;
   gdouble         tx4, ty4;
   gdouble         tcx, tcy;
+  gdouble         tpx, tpy;
 
   GimpMatrix3     transform;       /*  transformation matrix             */
   TransInfo       trans_info;      /*  transformation info               */
-  TransInfo       old_trans_info;  /*  for resetting everything          */
-  TransInfo       prev_trans_info; /*  for cancelling a drag operation   */
+  TransInfo      *old_trans_info;  /*  for resetting everything          */
+  TransInfo      *prev_trans_info; /*  the current finished state        */
+  GList          *undo_list;       /*  list of all states,
+                                       head is current == prev_trans_info,
+                                       tail is original == old_trans_info*/
+  GList          *redo_list;       /*  list of all undone states,
+                                       NULL when nothing undone */
 
   TransformAction function;        /*  current tool activity             */
 
@@ -86,12 +116,14 @@ struct _GimpTransformTool
   gboolean        use_handles;     /*  uses the corner handles           */
   gboolean        use_center;      /*  uses the center handle            */
   gboolean        use_mid_handles; /*  use handles at midpoints of edges */
+  gboolean        use_pivot;       /*  use pivot point                   */
 
-  GimpCanvasItem *handles[TRANSFORM_HANDLE_CENTER + 1];
+  GimpCanvasItem *handles[TRANSFORM_HANDLE_NUM];
 
   const gchar    *progress_text;
 
-  GtkWidget      *dialog;
+  gboolean        overlay;
+  GimpToolGui    *gui;
 };
 
 struct _GimpTransformToolClass
@@ -99,25 +131,36 @@ struct _GimpTransformToolClass
   GimpDrawToolClass  parent_class;
 
   /*  virtual functions  */
-  void         (* dialog)        (GimpTransformTool *tool);
-  void         (* dialog_update) (GimpTransformTool *tool);
-  void         (* prepare)       (GimpTransformTool *tool);
-  void         (* motion)        (GimpTransformTool *tool);
-  void         (* recalc_matrix) (GimpTransformTool *tool);
-  gchar      * (* get_undo_desc) (GimpTransformTool *tool);
-  GeglBuffer * (* transform)     (GimpTransformTool *tool,
-                                  GimpItem          *item,
-                                  GeglBuffer        *orig_buffer,
-                                  gint               orig_offset_x,
-                                  gint               orig_offset_y,
-                                  gint              *new_offset_x,
-                                  gint              *new_offset_y);
+  void            (* dialog)        (GimpTransformTool *tool);
+  void            (* dialog_update) (GimpTransformTool *tool);
+  void            (* prepare)       (GimpTransformTool *tool);
+  void            (* motion)        (GimpTransformTool *tool);
+  void            (* recalc_matrix) (GimpTransformTool *tool);
+  gchar         * (* get_undo_desc) (GimpTransformTool *tool);
+  TransformAction (* pick_function) (GimpTransformTool *tool,
+                                     const GimpCoords  *coords,
+                                     GdkModifierType    state,
+                                     GimpDisplay       *display);
+  void            (* cursor_update) (GimpTransformTool  *tr_tool,
+                                     GimpCursorType     *cursor,
+                                     GimpCursorModifier *modifier);
+  void            (* draw_gui)      (GimpTransformTool *tool,
+                                     gint               handle_w,
+                                     gint               handle_h);
+  GeglBuffer    * (* transform)     (GimpTransformTool *tool,
+                                     GimpItem          *item,
+                                     GeglBuffer        *orig_buffer,
+                                     gint               orig_offset_x,
+                                     gint               orig_offset_y,
+                                     gint              *new_offset_x,
+                                     gint              *new_offset_y);
 };
 
 
-GType   gimp_transform_tool_get_type      (void) G_GNUC_CONST;
+GType   gimp_transform_tool_get_type           (void) G_GNUC_CONST;
 
-void    gimp_transform_tool_recalc_matrix (GimpTransformTool *tr_tool);
+void    gimp_transform_tool_recalc_matrix      (GimpTransformTool *tr_tool);
+void    gimp_transform_tool_push_internal_undo (GimpTransformTool *tr_tool);
 
 
 #endif  /*  __GIMP_TRANSFORM_TOOL_H__  */

@@ -195,8 +195,7 @@ gimp_tool_options_editor_constructed (GObject *object)
   GimpToolOptionsEditor *editor = GIMP_TOOL_OPTIONS_EDITOR (object);
   GimpContext           *user_context;
 
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   editor->p->save_button =
     gimp_editor_add_button (GIMP_EDITOR (editor), GTK_STOCK_SAVE,
@@ -464,7 +463,7 @@ gimp_tool_options_editor_tool_changed (GimpContext           *context,
   
   /* This will warn if tool info is changed to nothing.
    * This seems to happen if starting in SWM with tool editor visible
-   * Maybe its normal, and the code should just be writen to
+   * Maybe its normal, and the code should just be written to
    * handle this case, but someone smarter needs to take a look*/
   g_return_if_fail(GIMP_IS_TOOL_INFO(tool_info));
 

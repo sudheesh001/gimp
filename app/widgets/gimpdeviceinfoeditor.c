@@ -141,6 +141,7 @@ static const gchar *const axis_use_strings[] =
   N_("Pressure"),
   N_("X tilt"),
   N_("Y tilt"),
+  /* Wheel as in mouse or input device wheel */
   N_("Wheel")
 };
 
@@ -191,6 +192,7 @@ gimp_device_info_editor_init (GimpDeviceInfoEditor *editor)
 
   /*  the axes  */
 
+  /* The axes of an input device */
   frame = gimp_frame_new (_("Axes"));
   gtk_box_pack_start (GTK_BOX (private->vbox), frame, FALSE, FALSE, 0);
   gtk_widget_show (frame);
@@ -330,8 +332,7 @@ gimp_device_info_editor_constructed (GObject *object)
 
   private = GIMP_DEVICE_INFO_EDITOR_GET_PRIVATE (object);
 
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   g_assert (GIMP_IS_DEVICE_INFO (private->info));
 
@@ -410,6 +411,7 @@ gimp_device_info_editor_constructed (GObject *object)
       GimpCurve *curve;
       gchar     *title;
 
+      /* e.g. "Pressure Curve" for mapping input device axes */
       title = g_strdup_printf (_("%s Curve"), axis_use_strings[i - 1]);
 
       frame = gimp_frame_new (title);

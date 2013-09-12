@@ -78,7 +78,8 @@ gimp_image_is_valid (gint32 image_ID)
  *
  * This procedure returns the list of images currently open in GIMP.
  *
- * Returns: The list of images currently open.
+ * Returns: The list of images currently open. The returned value must
+ * be freed with g_free().
  **/
 gint *
 gimp_image_list (gint *num_images)
@@ -160,7 +161,7 @@ gimp_image_new (gint              width,
  *
  * Creates a new image, undisplayed with the specified extents, type
  * and precision. Indexed images can only be created at
- * GIMP_PRECISION_U8 precision. See gimp_image_new() for further
+ * GIMP_PRECISION_U8_GAMMA precision. See gimp_image_new() for further
  * details.
  *
  * Returns: The ID of the newly created image.
@@ -688,7 +689,8 @@ gimp_image_rotate (gint32           image_ID,
  * This procedure returns the list of layers contained in the specified
  * image. The order of layers is from topmost to bottommost.
  *
- * Returns: The list of layers contained in the image.
+ * Returns: The list of layers contained in the image. The returned
+ * value must be freed with g_free().
  **/
 gint *
 gimp_image_get_layers (gint32  image_ID,
@@ -728,9 +730,12 @@ gimp_image_get_layers (gint32  image_ID,
  *
  * This procedure returns the list of channels contained in the
  * specified image. This does not include the selection mask, or layer
- * masks. The order is from topmost to bottommost.
+ * masks. The order is from topmost to bottommost. Note that
+ * \"channels\" are custom channels and do not include the image's
+ * color components.
  *
- * Returns: The list of channels contained in the image.
+ * Returns: The list of channels contained in the image. The returned
+ * value must be freed with g_free().
  **/
 gint *
 gimp_image_get_channels (gint32  image_ID,
@@ -771,7 +776,8 @@ gimp_image_get_channels (gint32  image_ID,
  * This procedure returns the list of vectors contained in the
  * specified image.
  *
- * Returns: The list of vectors contained in the image.
+ * Returns: The list of vectors contained in the image. The returned
+ * value must be freed with g_free().
  *
  * Since: GIMP 2.4
  **/
@@ -1086,8 +1092,9 @@ gimp_image_add_layer (gint32 image_ID,
  * specifies the location of the layer inside the stack (or the group,
  * if a valid parent was supplied), starting from the top (0) and
  * increasing. If the position is specified as -1 and the parent is
- * specified as 0, then the layer is inserted above the active layer.
- * The layer type must be compatible with the image base type.
+ * specified as 0, then the layer is inserted above the active layer,
+ * or inside the group if the active layer is a layer group. The layer
+ * type must be compatible with the image base type.
  *
  * Returns: TRUE on success.
  **/
@@ -1717,7 +1724,8 @@ gimp_image_merge_down (gint32        image_ID,
  * 3. If the image is not in Indexed color mode, no colormap is
  * returned.
  *
- * Returns: The image's colormap.
+ * Returns: The image's colormap. The returned value must be freed with
+ * g_free().
  **/
 guint8 *
 _gimp_image_get_colormap (gint32  image_ID,
@@ -2307,7 +2315,8 @@ gimp_image_set_component_visible (gint32          image_ID,
  * Otherwise, this function returns %NULL. See also
  * gimp_image_get_uri().
  *
- * Returns: The filename.
+ * Returns: The filename. The returned value must be freed with
+ * g_free().
  **/
 gchar *
 gimp_image_get_filename (gint32 image_ID)
@@ -2376,7 +2385,7 @@ gimp_image_set_filename (gint32       image_ID,
  * and not yet saved, or gimp-image-get-exported-uri if the image has
  * been exported to a non-GIMP file format.
  *
- * Returns: The URI.
+ * Returns: The URI. The returned value must be freed with g_free().
  *
  * Since: GIMP 2.8
  **/
@@ -2409,7 +2418,8 @@ gimp_image_get_uri (gint32 image_ID)
  * This procedure returns the XCF URI associated with the image. If
  * there is no such URI, this procedure returns %NULL.
  *
- * Returns: The imported URI.
+ * Returns: The imported URI. The returned value must be freed with
+ * g_free().
  *
  * Since: GIMP 2.8
  **/
@@ -2444,7 +2454,8 @@ gimp_image_get_xcf_uri (gint32 image_ID)
  * image was not imported, or has since been saved in the native Gimp
  * format, this procedure returns %NULL.
  *
- * Returns: The imported URI.
+ * Returns: The imported URI. The returned value must be freed with
+ * g_free().
  *
  * Since: GIMP 2.8
  **/
@@ -2478,7 +2489,8 @@ gimp_image_get_imported_uri (gint32 image_ID)
  * if the image was exported a non-native GIMP format. If the image was
  * not exported, this procedure returns %NULL.
  *
- * Returns: The exported URI.
+ * Returns: The exported URI. The returned value must be freed with
+ * g_free().
  *
  * Since: GIMP 2.8
  **/
@@ -2512,7 +2524,7 @@ gimp_image_get_exported_uri (gint32 image_ID)
  * or an URI, then this is the base name (the last component of the
  * path). Otherwise it is the translated string \"Untitled\".
  *
- * Returns: The name.
+ * Returns: The name. The returned value must be freed with g_free().
  **/
 gchar *
 gimp_image_get_name (gint32 image_ID)
@@ -3085,7 +3097,8 @@ gimp_image_get_parasite (gint32       image_ID,
  *
  * Returns a list of all currently attached parasites.
  *
- * Returns: The names of currently attached parasites.
+ * Returns: The names of currently attached parasites. The returned
+ * value must be freed with g_strfreev().
  *
  * Since: GIMP 2.8
  **/
@@ -3108,9 +3121,10 @@ gimp_image_get_parasite_list (gint32  image_ID,
   if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
     {
       *num_parasites = return_vals[1].data.d_int32;
-      parasites = g_new (gchar *, *num_parasites);
+      parasites = g_new (gchar *, *num_parasites + 1);
       for (i = 0; i < *num_parasites; i++)
         parasites[i] = g_strdup (return_vals[2].data.d_stringarray[i]);
+      parasites[i] = NULL;
     }
 
   gimp_destroy_params (return_vals, nreturn_vals);

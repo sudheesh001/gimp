@@ -143,6 +143,31 @@ gimp_container_tree_view_drop_status (GimpContainerTreeView    *tree_view,
             drop_pos = GTK_TREE_VIEW_DROP_BEFORE;
         }
     }
+  else
+    {
+      GtkTreeIter iter;
+      gint        n_children;
+
+      n_children = gtk_tree_model_iter_n_children (tree_view->model, NULL);
+
+      if (n_children > 0 &&
+          gtk_tree_model_iter_nth_child (tree_view->model, &iter,
+                                         NULL, n_children - 1))
+        {
+          GimpViewRenderer *renderer;
+
+          gtk_tree_model_get (tree_view->model, &iter,
+                              GIMP_CONTAINER_TREE_STORE_COLUMN_RENDERER,
+                              &renderer,
+                              -1);
+
+          drop_path     = gtk_tree_model_get_path (tree_view->model, &iter);
+          dest_viewable = renderer->viewable;
+          drop_pos      = GTK_TREE_VIEW_DROP_AFTER;
+
+          g_object_unref (renderer);
+        }
+    }
 
   if (dest_viewable || tree_view->priv->dnd_drop_to_empty)
     {

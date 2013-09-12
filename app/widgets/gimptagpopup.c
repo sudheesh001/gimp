@@ -217,8 +217,7 @@ gimp_tag_popup_constructed (GObject *object)
   GdkRectangle         popup_rects[2]; /* variants of popup placement */
   GdkRectangle         popup_rect; /* best popup rect in screen coordinates */
 
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   entry = GTK_WIDGET (popup->combo_entry);
 
@@ -257,6 +256,8 @@ gimp_tag_popup_constructed (GObject *object)
 
       tag_data->tag   = tag_iterator->data;
       tag_data->state = GTK_STATE_NORMAL;
+
+      g_object_ref (tag_data->tag);
 
       for (j = 0; j < current_count; j++)
         {
@@ -387,6 +388,13 @@ gimp_tag_popup_dispose (GObject *object)
 
   if (popup->tag_data)
     {
+      gint i;
+
+      for (i = 0; i < popup->tag_count; i++)
+        {
+          g_object_unref (popup->tag_data[i].tag);
+        }
+
       g_free (popup->tag_data);
       popup->tag_data = NULL;
     }

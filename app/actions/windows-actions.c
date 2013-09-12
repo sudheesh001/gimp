@@ -33,8 +33,6 @@
 #include "core/gimpimage.h"
 #include "core/gimplist.h"
 
-#include "file/file-utils.h"
-
 #include "widgets/gimpactiongroup.h"
 #include "widgets/gimpdialogfactory.h"
 #include "widgets/gimpdock.h"
@@ -56,6 +54,10 @@ static void  windows_actions_display_add               (GimpContainer     *conta
                                                         GimpActionGroup   *group);
 static void  windows_actions_display_remove            (GimpContainer     *container,
                                                         GimpDisplay       *display,
+                                                        GimpActionGroup   *group);
+static void  windows_actions_display_reorder           (GimpContainer     *container,
+                                                        GimpDisplay       *display,
+                                                        gint               position,
                                                         GimpActionGroup   *group);
 static void  windows_actions_image_notify              (GimpDisplay       *display,
                                                         const GParamSpec  *unused,
@@ -85,7 +87,7 @@ static void  windows_actions_single_window_mode_notify (GimpDisplayConfig *confi
 /* The only reason we have "Tab" in the action entries below is to
  * give away the hardcoded keyboard shortcut. If the user changes the
  * shortcut to something else, both that shortcut and Tab will
- * work. The reason we have the shortcut hardcoded is beccause
+ * work. The reason we have the shortcut hardcoded is because
  * gtk_accelerator_valid() returns FALSE for GDK_tab.
  */
 
@@ -149,6 +151,9 @@ windows_actions_setup (GimpActionGroup *group)
                            group, 0);
   g_signal_connect_object (group->gimp->displays, "remove",
                            G_CALLBACK (windows_actions_display_remove),
+                           group, 0);
+  g_signal_connect_object (group->gimp->displays, "reorder",
+                           G_CALLBACK (windows_actions_display_reorder),
                            group, 0);
 
   for (list = gimp_get_display_iter (group->gimp);
@@ -257,6 +262,15 @@ windows_actions_display_remove (GimpContainer   *container,
 }
 
 static void
+windows_actions_display_reorder (GimpContainer   *container,
+                                 GimpDisplay     *display,
+                                 gint             new_index,
+                                 GimpActionGroup *group)
+{
+  windows_actions_update_display_accels (group);
+}
+
+static void
 windows_actions_image_notify (GimpDisplay      *display,
                               const GParamSpec *unused,
                               GimpActionGroup  *group)
@@ -295,19 +309,12 @@ windows_actions_image_notify (GimpDisplay      *display,
         }
 
       {
-        const gchar *uri;
-        gchar       *filename;
-        gchar       *basename;
+        const gchar *display_name;
         gchar       *escaped;
         gchar       *title;
 
-        uri = gimp_image_get_uri_or_untitled (image);
-
-        filename = file_utils_uri_display_name (uri);
-        basename = file_utils_uri_display_basename (uri);
-
-        escaped = gimp_escape_uline (basename);
-        g_free (basename);
+        display_name = gimp_image_get_display_name (image);
+        escaped = gimp_escape_uline (display_name);
 
         title = g_strdup_printf ("%s-%d.%d", escaped,
                                  gimp_image_get_ID (image),
@@ -316,12 +323,11 @@ windows_actions_image_notify (GimpDisplay      *display,
 
         g_object_set (action,
                       "label",    title,
-                      "tooltip",  filename,
+                      "tooltip",  gimp_image_get_display_path (image),
                       "viewable", image,
                       "context",  gimp_get_user_context (group->gimp),
                       NULL);
 
-        g_free (filename);
         g_free (title);
       }
 

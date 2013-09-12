@@ -39,7 +39,7 @@
 #include "display/gimpdisplay.h"
 
 #include "gimpperspectiveclonetool.h"
-#include "gimppaintoptions-gui.h"
+#include "gimpcloneoptions-gui.h"
 #include "gimptoolcontrol.h"
 
 #include "gimp-intl.h"
@@ -179,8 +179,7 @@ gimp_perspective_clone_tool_constructed (GObject *object)
   GimpPerspectiveCloneTool    *clone_tool = GIMP_PERSPECTIVE_CLONE_TOOL (object);
   GimpPerspectiveCloneOptions *options;
 
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   options = GIMP_PERSPECTIVE_CLONE_TOOL_GET_OPTIONS (tool);
 
@@ -567,18 +566,15 @@ gimp_perspective_clone_tool_cursor_update (GimpTool         *tool,
     }
   else
     {
-      if (GIMP_CLONE_OPTIONS (options)->clone_type == GIMP_IMAGE_CLONE)
-        {
-          GdkModifierType toggle_mask = gimp_get_toggle_behavior_mask ();
+      GdkModifierType toggle_mask = gimp_get_toggle_behavior_mask ();
 
-          if ((state & (toggle_mask | GDK_SHIFT_MASK)) == toggle_mask)
-            {
-              cursor = GIMP_CURSOR_CROSSHAIR_SMALL;
-            }
-          else if (! GIMP_SOURCE_CORE (GIMP_PAINT_TOOL (tool)->core)->src_drawable)
-            {
-              modifier = GIMP_CURSOR_MODIFIER_BAD;
-            }
+      if ((state & (toggle_mask | GDK_SHIFT_MASK)) == toggle_mask)
+        {
+          cursor = GIMP_CURSOR_CROSSHAIR_SMALL;
+        }
+      else if (! GIMP_SOURCE_CORE (GIMP_PAINT_TOOL (tool)->core)->src_drawable)
+        {
+          modifier = GIMP_CURSOR_MODIFIER_BAD;
         }
     }
 
@@ -662,8 +658,7 @@ gimp_perspective_clone_tool_oper_update (GimpTool         *tool,
       GIMP_TOOL_CLASS (parent_class)->oper_update (tool, coords, state,
                                                    proximity, display);
 
-      if (GIMP_CLONE_OPTIONS (options)->clone_type == GIMP_IMAGE_CLONE &&
-          proximity)
+      if (proximity)
         {
           GimpPaintCore        *core        = GIMP_PAINT_TOOL (tool)->core;
           GimpPerspectiveClone *clone       = GIMP_PERSPECTIVE_CLONE (core);
@@ -766,8 +761,7 @@ gimp_perspective_clone_tool_draw (GimpDrawTool *draw_tool)
                                  GIMP_HANDLE_ANCHOR_CENTER);
     }
 
-  if (GIMP_CLONE_OPTIONS (options)->clone_type == GIMP_IMAGE_CLONE &&
-      source_core->src_drawable && clone_tool->src_display)
+  if (source_core->src_drawable && clone_tool->src_display)
     {
       GimpDisplay *tmp_display;
 
@@ -875,53 +869,14 @@ static GtkWidget *
 gimp_perspective_clone_options_gui (GimpToolOptions *tool_options)
 {
   GObject   *config = G_OBJECT (tool_options);
-  GtkWidget *vbox;
-  GtkWidget *paint_options;
-  GtkWidget *frame;
+  GtkWidget *vbox   = gimp_clone_options_gui (tool_options);
   GtkWidget *mode;
-  GtkWidget *button;
-  GtkWidget *hbox;
-  GtkWidget *label;
-  GtkWidget *combo;
-
-  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
-  paint_options = gimp_paint_options_gui (tool_options);
 
   /* radio buttons to set if you are modifying perspe plane or painting */
   mode = gimp_prop_enum_radio_box_new (config, "clone-mode", 0, 0);
   gtk_box_pack_start (GTK_BOX (vbox), mode, FALSE, FALSE, 0);
+  gtk_box_reorder_child (GTK_BOX (vbox), mode, 0);
   gtk_widget_show (mode);
-
-  gtk_box_pack_start (GTK_BOX (vbox), paint_options, FALSE, FALSE, 0);
-  gtk_widget_show (paint_options);
-
-  frame = gimp_prop_enum_radio_frame_new (config, "clone-type",
-                                          _("Source"), 0, 0);
-  gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
-  gtk_widget_show (frame);
-
-  button = gimp_prop_check_button_new (config, "sample-merged",
-                                       _("Sample merged"));
-  gimp_enum_radio_frame_add (GTK_FRAME (frame), button,
-                             GIMP_IMAGE_CLONE, TRUE);
-
-  hbox = gimp_prop_pattern_box_new (NULL, GIMP_CONTEXT (tool_options),
-                                    NULL, 2,
-                                    "pattern-view-type", "pattern-view-size");
-  gimp_enum_radio_frame_add (GTK_FRAME (frame), hbox,
-                             GIMP_PATTERN_CLONE, TRUE);
-
-  hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 2);
-  gtk_box_pack_start (GTK_BOX (vbox), hbox, FALSE, FALSE, 0);
-  gtk_widget_show (hbox);
-
-  label = gtk_label_new (_("Alignment:"));
-  gtk_box_pack_start (GTK_BOX (hbox), label, FALSE, FALSE, 0);
-  gtk_widget_show (label);
-
-  combo = gimp_prop_enum_combo_box_new (config, "align-mode", 0, 0);
-  gtk_box_pack_start (GTK_BOX (hbox), combo, TRUE, TRUE, 0);
-  gtk_widget_show (combo);
 
   return vbox;
 }

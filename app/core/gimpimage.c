@@ -157,7 +157,6 @@ static gint64   gimp_image_get_memsize           (GimpObject        *object,
 static gboolean gimp_image_get_size              (GimpViewable      *viewable,
                                                   gint              *width,
                                                   gint              *height);
-static void     gimp_image_invalidate_preview    (GimpViewable      *viewable);
 static void     gimp_image_size_changed          (GimpViewable      *viewable);
 static gchar  * gimp_image_get_description       (GimpViewable      *viewable,
                                                   gchar            **tooltip);
@@ -522,11 +521,9 @@ gimp_image_class_init (GimpImageClass *klass)
 
   viewable_class->default_stock_id    = "gimp-image";
   viewable_class->get_size            = gimp_image_get_size;
-  viewable_class->invalidate_preview  = gimp_image_invalidate_preview;
   viewable_class->size_changed        = gimp_image_size_changed;
   viewable_class->get_preview_size    = gimp_image_get_preview_size;
   viewable_class->get_popup_size      = gimp_image_get_popup_size;
-  viewable_class->get_preview         = gimp_image_get_preview;
   viewable_class->get_new_preview     = gimp_image_get_new_preview;
   viewable_class->get_description     = gimp_image_get_description;
 
@@ -594,7 +591,7 @@ gimp_image_class_init (GimpImageClass *klass)
   g_object_class_install_property (object_class, PROP_PRECISION,
                                    g_param_spec_enum ("precision", NULL, NULL,
                                                       GIMP_TYPE_PRECISION,
-                                                      GIMP_PRECISION_U8,
+                                                      GIMP_PRECISION_U8_GAMMA,
                                                       GIMP_PARAM_READWRITE |
                                                       G_PARAM_CONSTRUCT));
 
@@ -635,7 +632,7 @@ gimp_image_init (GimpImage *image)
   private->yresolution         = 1.0;
   private->resolution_unit     = GIMP_UNIT_INCH;
   private->base_type           = GIMP_RGB;
-  private->precision           = GIMP_PRECISION_U8;
+  private->precision           = GIMP_PRECISION_U8_GAMMA;
 
   private->colormap            = NULL;
   private->n_colors            = 0;
@@ -728,8 +725,6 @@ gimp_image_init (GimpImage *image)
   private->group_count         = 0;
   private->pushing_undo_group  = GIMP_UNDO_GROUP_NONE;
 
-  private->preview             = NULL;
-
   private->flush_accum.alpha_changed              = FALSE;
   private->flush_accum.mask_changed               = FALSE;
   private->flush_accum.floating_selection_changed = FALSE;
@@ -745,8 +740,7 @@ gimp_image_constructed (GObject *object)
   GimpCoreConfig   *config;
   GimpTemplate     *template;
 
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   g_assert (GIMP_IS_GIMP (image->gimp));
 
@@ -915,6 +909,7 @@ gimp_image_finalize (GObject *object)
     {
       g_object_unref (private->graph);
       private->graph = NULL;
+      private->visible_mask = NULL;
     }
 
   if (private->colormap)
@@ -945,12 +940,6 @@ gimp_image_finalize (GObject *object)
     {
       g_object_unref (private->selection_mask);
       private->selection_mask = NULL;
-    }
-
-  if (private->preview)
-    {
-      gimp_temp_buf_unref (private->preview);
-      private->preview = NULL;
     }
 
   if (private->parasites)
@@ -1001,6 +990,12 @@ gimp_image_finalize (GObject *object)
       private->display_name = NULL;
     }
 
+  if (private->display_path)
+    {
+      g_free (private->display_path);
+      private->display_path = NULL;
+    }
+
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
@@ -1018,6 +1013,12 @@ gimp_image_name_changed (GimpObject *object)
     {
       g_free (private->display_name);
       private->display_name = NULL;
+    }
+
+  if (private->display_path)
+    {
+      g_free (private->display_path);
+      private->display_path = NULL;
     }
 
   /* We never want the empty string as a name, so change empty strings
@@ -1074,8 +1075,6 @@ gimp_image_get_memsize (GimpObject *object,
   memsize += gimp_object_get_memsize (GIMP_OBJECT (private->redo_stack),
                                       gui_size);
 
-  *gui_size += gimp_temp_buf_get_memsize (private->preview);
-
   return memsize + GIMP_OBJECT_CLASS (parent_class)->get_memsize (object,
                                                                   gui_size);
 }
@@ -1091,20 +1090,6 @@ gimp_image_get_size (GimpViewable *viewable,
   *height = gimp_image_get_height (image);
 
   return TRUE;
-}
-
-static void
-gimp_image_invalidate_preview (GimpViewable *viewable)
-{
-  GimpImagePrivate *private = GIMP_IMAGE_GET_PRIVATE (viewable);
-
-  GIMP_VIEWABLE_CLASS (parent_class)->invalidate_preview (viewable);
-
-  if (private->preview)
-    {
-      gimp_temp_buf_unref (private->preview);
-      private->preview = NULL;
-    }
 }
 
 static void
@@ -1147,9 +1132,7 @@ gimp_image_get_description (GimpViewable  *viewable,
   GimpImage *image = GIMP_IMAGE (viewable);
 
   if (tooltip)
-    {
-      *tooltip = file_utils_uri_display_name (gimp_image_get_uri_or_untitled (image));
-    }
+    *tooltip = g_strdup (gimp_image_get_display_path (image));
 
   return g_strdup_printf ("%s-%d",
 			  gimp_image_get_display_name (image),
@@ -1188,7 +1171,7 @@ gimp_image_real_colormap_changed (GimpImage *image,
 {
   GimpImagePrivate *private = GIMP_IMAGE_GET_PRIVATE (image);
 
-  if (private->colormap)
+  if (private->colormap && private->n_colors > 0)
     {
       babl_palette_set_palette (private->babl_palette_rgb,
                                 gimp_babl_format (GIMP_RGB,
@@ -1287,20 +1270,12 @@ gimp_image_get_proj_format (GimpProjectable *projectable)
     {
     case GIMP_RGB:
     case GIMP_INDEXED:
-#if 0
-      /* XXX use real format once the legacy projection is gone */
-      return gimp_image_get_format (image, GIMP_RGB, GIMP_PRECISION_U8, TRUE);
-#else
-      return babl_format ("R'G'B'A u8");
-#endif
+      return gimp_image_get_format (image, GIMP_RGB,
+                                    gimp_image_get_precision (image), TRUE);
 
     case GIMP_GRAY:
-#if 0
-      /* XXX use real format once the legacy projection is gone */
-      return gimp_image_get_format (image, GIMP_GRAY, GIMP_PRECISION_U8, TRUE);
-#else
-      return babl_format ("Y'A u8");
-#endif
+      return gimp_image_get_format (image, GIMP_GRAY,
+                                    gimp_image_get_precision (image), TRUE);
     }
 
   g_assert_not_reached ();
@@ -1311,12 +1286,12 @@ gimp_image_get_proj_format (GimpProjectable *projectable)
 static GeglNode *
 gimp_image_get_graph (GimpProjectable *projectable)
 {
-  GimpImage        *image   = GIMP_IMAGE (projectable);
-  GimpImagePrivate *private = GIMP_IMAGE_GET_PRIVATE (image);
-  GeglNode         *layers_node;
-  GeglNode         *channels_node;
-  GeglNode         *blend_node;
-  GeglNode         *output;
+  GimpImage         *image   = GIMP_IMAGE (projectable);
+  GimpImagePrivate  *private = GIMP_IMAGE_GET_PRIVATE (image);
+  GeglNode          *layers_node;
+  GeglNode          *channels_node;
+  GeglNode          *output;
+  GimpComponentMask  mask;
 
   if (private->graph)
     return private->graph;
@@ -1324,28 +1299,33 @@ gimp_image_get_graph (GimpProjectable *projectable)
   private->graph = gegl_node_new ();
 
   layers_node =
-    gimp_drawable_stack_get_graph (GIMP_DRAWABLE_STACK (private->layers->container));
+    gimp_filter_stack_get_graph (GIMP_FILTER_STACK (private->layers->container));
 
   gegl_node_add_child (private->graph, layers_node);
 
   channels_node =
-    gimp_drawable_stack_get_graph (GIMP_DRAWABLE_STACK (private->channels->container));
+    gimp_filter_stack_get_graph (GIMP_FILTER_STACK (private->channels->container));
 
   gegl_node_add_child (private->graph, channels_node);
 
-  blend_node = gegl_node_new_child (private->graph,
-                                    "operation", "gegl:over",
-                                    NULL);
-
   gegl_node_connect_to (layers_node,   "output",
-                        blend_node,    "input");
-  gegl_node_connect_to (channels_node, "output",
-                        blend_node,    "aux");
+                        channels_node, "input");
+
+  mask = ~gimp_image_get_visible_mask (image) & GIMP_COMPONENT_ALL;
+
+  private->visible_mask =
+    gegl_node_new_child (private->graph,
+                         "operation", "gimp:mask-components",
+                         "mask",      mask,
+                         NULL);
+
+  gegl_node_connect_to (channels_node,         "output",
+                        private->visible_mask, "input");
 
   output = gegl_node_get_output_proxy (private->graph, "output");
 
-  gegl_node_connect_to (blend_node, "output",
-                        output,     "input");
+  gegl_node_connect_to (private->visible_mask, "output",
+                        output,                "input");
 
   return private->graph;
 }
@@ -1476,7 +1456,7 @@ gimp_image_new (Gimp              *gimp,
 {
   g_return_val_if_fail (GIMP_IS_GIMP (gimp), NULL);
   g_return_val_if_fail (base_type != GIMP_INDEXED ||
-                        precision == GIMP_PRECISION_U8, NULL);
+                        precision == GIMP_PRECISION_U8_GAMMA, NULL);
 
   return g_object_new (GIMP_TYPE_IMAGE,
                        "gimp",      gimp,
@@ -1493,6 +1473,14 @@ gimp_image_get_base_type (const GimpImage *image)
   g_return_val_if_fail (GIMP_IS_IMAGE (image), -1);
 
   return GIMP_IMAGE_GET_PRIVATE (image)->base_type;
+}
+
+GimpComponentType
+gimp_image_get_component_type (const GimpImage *image)
+{
+  g_return_val_if_fail (GIMP_IS_IMAGE (image), -1);
+
+  return gimp_babl_component_type (GIMP_IMAGE_GET_PRIVATE (image)->precision);
 }
 
 GimpPrecision
@@ -1518,7 +1506,7 @@ gimp_image_get_format (const GimpImage   *image,
       return gimp_babl_format (base_type, precision, with_alpha);
 
     case GIMP_INDEXED:
-      if (precision == GIMP_PRECISION_U8)
+      if (precision == GIMP_PRECISION_U8_GAMMA)
         {
           if (with_alpha)
             return gimp_image_colormap_get_rgba_format (image);
@@ -1557,16 +1545,7 @@ gimp_image_get_mask_format (const GimpImage *image)
 {
   g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
 
-  switch (gimp_image_get_precision (image))
-    {
-    case GIMP_PRECISION_U8:    return babl_format ("Y u8");
-    case GIMP_PRECISION_U16:   return babl_format ("Y u16");
-    case GIMP_PRECISION_U32:   return babl_format ("Y u32");
-    case GIMP_PRECISION_HALF:  return babl_format ("Y half");
-    case GIMP_PRECISION_FLOAT: return babl_format ("Y float");
-    }
-
-  g_return_val_if_reached (NULL);
+  return gimp_babl_mask_format (gimp_image_get_precision (image));
 }
 
 gint
@@ -1724,8 +1703,7 @@ gimp_image_get_save_a_copy_uri (const GimpImage *image)
  * @image: A #GimpImage.
  *
  * Returns: The XCF file URI, the imported file URI, or the exported
- * file URI, in that order of precedence. Only to help implement
- * backwards compatibility with GIMP 2.6 API.
+ * file URI, in that order of precedence.
  **/
 const gchar *
 gimp_image_get_any_uri (const GimpImage *image)
@@ -1765,6 +1743,8 @@ gimp_image_set_imported_uri (GimpImage   *image,
 
   g_object_set_data_full (G_OBJECT (image), GIMP_FILE_IMPORT_SOURCE_URI_KEY,
                           g_strdup (uri), (GDestroyNotify) g_free);
+
+  gimp_object_name_changed (GIMP_OBJECT (image));
 }
 
 /**
@@ -1787,6 +1767,8 @@ gimp_image_set_exported_uri (GimpImage   *image,
   g_object_set_data_full (G_OBJECT (image),
                           GIMP_FILE_EXPORT_URI_KEY,
                           g_strdup (uri), (GDestroyNotify) g_free);
+
+  gimp_object_name_changed (GIMP_OBJECT (image));
 }
 
 /**
@@ -1826,6 +1808,100 @@ gimp_image_get_filename (const GimpImage *image)
   return g_filename_from_uri (uri, NULL, NULL);
 }
 
+static gchar *
+gimp_image_format_display_uri (GimpImage *image,
+                               gboolean   basename)
+{
+  const gchar *uri_format    = NULL;
+  const gchar *export_status = NULL;
+  const gchar *uri;
+  const gchar *source;
+  const gchar *dest;
+  gboolean     is_imported;
+  gboolean     is_exported;
+  gchar       *display_uri   = NULL;
+  gchar       *format_string;
+  gchar       *tmp;
+
+  g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
+
+  uri    = gimp_image_get_uri (image);
+  source = gimp_image_get_imported_uri (image);
+  dest   = gimp_image_get_exported_uri (image);
+
+  is_imported = (source != NULL);
+  is_exported = (dest   != NULL);
+
+  if (uri)
+    {
+      display_uri = g_strdup (uri);
+      uri_format  = "%s";
+    }
+  else
+    {
+      if (is_imported)
+        display_uri = g_strdup (source);
+
+      /* Calculate filename suffix */
+      if (! gimp_image_is_export_dirty (image))
+        {
+          if (is_exported)
+            {
+              display_uri   = g_strdup (dest);
+              export_status = _(" (exported)");
+            }
+          else if (is_imported)
+            {
+              export_status = _(" (overwritten)");
+            }
+          else
+            {
+              g_warning ("Unexpected code path, Save+export implementation is buggy!");
+            }
+        }
+      else if (is_imported)
+        {
+          export_status = _(" (imported)");
+        }
+
+      if (display_uri)
+        {
+          gchar *tmp = file_utils_uri_with_new_ext (display_uri, NULL);
+          g_free (display_uri);
+          display_uri = tmp;
+        }
+
+      uri_format = "[%s]";
+    }
+
+  if (! display_uri)
+    {
+      display_uri = g_strdup (gimp_image_get_string_untitled ());
+    }
+  else if (basename)
+    {
+      tmp = file_utils_uri_display_basename (display_uri);
+      g_free (display_uri);
+      display_uri = tmp;
+    }
+  else
+    {
+      tmp = file_utils_uri_display_name (display_uri);
+      g_free (display_uri);
+      display_uri = tmp;
+    }
+
+  format_string = g_strconcat (uri_format, export_status, NULL);
+
+  tmp = g_strdup_printf (format_string, display_uri);
+  g_free (display_uri);
+  display_uri = tmp;
+
+  g_free (format_string);
+
+  return display_uri;
+}
+
 const gchar *
 gimp_image_get_display_name (GimpImage *image)
 {
@@ -1836,13 +1912,24 @@ gimp_image_get_display_name (GimpImage *image)
   private = GIMP_IMAGE_GET_PRIVATE (image);
 
   if (! private->display_name)
-    {
-      const gchar *uri = gimp_image_get_uri_or_untitled (image);
-
-      private->display_name = file_utils_uri_display_basename (uri);
-    }
+    private->display_name = gimp_image_format_display_uri (image, TRUE);
 
   return private->display_name;
+}
+
+const gchar *
+gimp_image_get_display_path (GimpImage *image)
+{
+  GimpImagePrivate *private;
+
+  g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
+
+  private = GIMP_IMAGE_GET_PRIVATE (image);
+
+  if (! private->display_path)
+    private->display_path = gimp_image_format_display_uri (image, FALSE);
+
+  return private->display_path;
 }
 
 void
@@ -2171,15 +2258,7 @@ gimp_image_set_component_active (GimpImage       *image,
 
   if (index != -1 && active != private->active[index])
     {
-      GimpLayer *floating_sel = gimp_image_get_floating_selection (image);
-
       private->active[index] = active ? TRUE : FALSE;
-
-      if (floating_sel)
-        gimp_drawable_update (GIMP_DRAWABLE (floating_sel),
-                              0, 0,
-                              gimp_item_get_width  (GIMP_ITEM (floating_sel)),
-                              gimp_item_get_height (GIMP_ITEM (floating_sel)));
 
       /*  If there is an active channel and we mess with the components,
        *  the active channel gets unset...
@@ -2245,10 +2324,10 @@ gimp_image_get_active_mask (const GimpImage *image)
 
     case GIMP_GRAY:
     case GIMP_INDEXED:
-      mask |= (private->active[GRAY])  ? GIMP_COMPONENT_RED   : 0;
-      mask |= (private->active[GRAY])  ? GIMP_COMPONENT_GREEN : 0;
-      mask |= (private->active[GRAY])  ? GIMP_COMPONENT_BLUE  : 0;
-      mask |= (private->active[ALPHA]) ? GIMP_COMPONENT_ALPHA : 0;
+      mask |= (private->active[GRAY])    ? GIMP_COMPONENT_RED   : 0;
+      mask |= (private->active[GRAY])    ? GIMP_COMPONENT_GREEN : 0;
+      mask |= (private->active[GRAY])    ? GIMP_COMPONENT_BLUE  : 0;
+      mask |= (private->active[ALPHA_G]) ? GIMP_COMPONENT_ALPHA : 0;
       break;
     }
 
@@ -2272,6 +2351,17 @@ gimp_image_set_component_visible (GimpImage       *image,
   if (index != -1 && visible != private->visible[index])
     {
       private->visible[index] = visible ? TRUE : FALSE;
+
+      if (private->visible_mask)
+        {
+          GimpComponentMask mask;
+
+          mask = ~gimp_image_get_visible_mask (image) & GIMP_COMPONENT_ALL;
+
+          gegl_node_set (private->visible_mask,
+                         "mask", mask,
+                         NULL);
+        }
 
       g_signal_emit (image,
                      gimp_image_signals[COMPONENT_VISIBILITY_CHANGED], 0,
@@ -2314,6 +2404,37 @@ gimp_image_get_visible_array (const GimpImage *image,
 
   for (i = 0; i < MAX_CHANNELS; i++)
     components[i] = private->visible[i];
+}
+
+GimpComponentMask
+gimp_image_get_visible_mask (const GimpImage *image)
+{
+  GimpImagePrivate  *private;
+  GimpComponentMask  mask = 0;
+
+  g_return_val_if_fail (GIMP_IS_IMAGE (image), 0);
+
+  private = GIMP_IMAGE_GET_PRIVATE (image);
+
+  switch (gimp_image_get_base_type (image))
+    {
+    case GIMP_RGB:
+      mask |= (private->visible[RED])   ? GIMP_COMPONENT_RED   : 0;
+      mask |= (private->visible[GREEN]) ? GIMP_COMPONENT_GREEN : 0;
+      mask |= (private->visible[BLUE])  ? GIMP_COMPONENT_BLUE  : 0;
+      mask |= (private->visible[ALPHA]) ? GIMP_COMPONENT_ALPHA : 0;
+      break;
+
+    case GIMP_GRAY:
+    case GIMP_INDEXED:
+      mask |= (private->visible[GRAY])  ? GIMP_COMPONENT_RED   : 0;
+      mask |= (private->visible[GRAY])  ? GIMP_COMPONENT_GREEN : 0;
+      mask |= (private->visible[GRAY])  ? GIMP_COMPONENT_BLUE  : 0;
+      mask |= (private->visible[ALPHA]) ? GIMP_COMPONENT_ALPHA : 0;
+      break;
+    }
+
+  return mask;
 }
 
 

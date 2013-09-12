@@ -44,6 +44,41 @@ gimp_component_mask_get_type (void)
 }
 
 GType
+gimp_component_type_get_type (void)
+{
+  static const GEnumValue values[] =
+  {
+    { GIMP_COMPONENT_TYPE_U8, "GIMP_COMPONENT_TYPE_U8", "u8" },
+    { GIMP_COMPONENT_TYPE_U16, "GIMP_COMPONENT_TYPE_U16", "u16" },
+    { GIMP_COMPONENT_TYPE_U32, "GIMP_COMPONENT_TYPE_U32", "u32" },
+    { GIMP_COMPONENT_TYPE_HALF, "GIMP_COMPONENT_TYPE_HALF", "half" },
+    { GIMP_COMPONENT_TYPE_FLOAT, "GIMP_COMPONENT_TYPE_FLOAT", "float" },
+    { 0, NULL, NULL }
+  };
+
+  static const GimpEnumDesc descs[] =
+  {
+    { GIMP_COMPONENT_TYPE_U8, NC_("component-type", "8-bit integer"), NULL },
+    { GIMP_COMPONENT_TYPE_U16, NC_("component-type", "16-bit integer"), NULL },
+    { GIMP_COMPONENT_TYPE_U32, NC_("component-type", "32-bit integer"), NULL },
+    { GIMP_COMPONENT_TYPE_HALF, NC_("component-type", "16-bit floating point"), NULL },
+    { GIMP_COMPONENT_TYPE_FLOAT, NC_("component-type", "32-bit floating point"), NULL },
+    { 0, NULL, NULL }
+  };
+
+  static GType type = 0;
+
+  if (G_UNLIKELY (! type))
+    {
+      type = g_enum_register_static ("GimpComponentType", values);
+      gimp_type_set_translation_context (type, "component-type");
+      gimp_enum_set_value_descriptions (type, descs);
+    }
+
+  return type;
+}
+
+GType
 gimp_container_policy_get_type (void)
 {
   static const GEnumValue values[] =
@@ -753,21 +788,31 @@ gimp_precision_get_type (void)
 {
   static const GEnumValue values[] =
   {
-    { GIMP_PRECISION_U8, "GIMP_PRECISION_U8", "u8" },
-    { GIMP_PRECISION_U16, "GIMP_PRECISION_U16", "u16" },
-    { GIMP_PRECISION_U32, "GIMP_PRECISION_U32", "u32" },
-    { GIMP_PRECISION_HALF, "GIMP_PRECISION_HALF", "half" },
-    { GIMP_PRECISION_FLOAT, "GIMP_PRECISION_FLOAT", "float" },
+    { GIMP_PRECISION_U8_LINEAR, "GIMP_PRECISION_U8_LINEAR", "u8-linear" },
+    { GIMP_PRECISION_U8_GAMMA, "GIMP_PRECISION_U8_GAMMA", "u8-gamma" },
+    { GIMP_PRECISION_U16_LINEAR, "GIMP_PRECISION_U16_LINEAR", "u16-linear" },
+    { GIMP_PRECISION_U16_GAMMA, "GIMP_PRECISION_U16_GAMMA", "u16-gamma" },
+    { GIMP_PRECISION_U32_LINEAR, "GIMP_PRECISION_U32_LINEAR", "u32-linear" },
+    { GIMP_PRECISION_U32_GAMMA, "GIMP_PRECISION_U32_GAMMA", "u32-gamma" },
+    { GIMP_PRECISION_HALF_LINEAR, "GIMP_PRECISION_HALF_LINEAR", "half-linear" },
+    { GIMP_PRECISION_HALF_GAMMA, "GIMP_PRECISION_HALF_GAMMA", "half-gamma" },
+    { GIMP_PRECISION_FLOAT_LINEAR, "GIMP_PRECISION_FLOAT_LINEAR", "float-linear" },
+    { GIMP_PRECISION_FLOAT_GAMMA, "GIMP_PRECISION_FLOAT_GAMMA", "float-gamma" },
     { 0, NULL, NULL }
   };
 
   static const GimpEnumDesc descs[] =
   {
-    { GIMP_PRECISION_U8, NC_("precision", "8-bit integer"), NULL },
-    { GIMP_PRECISION_U16, NC_("precision", "16-bit integer"), NULL },
-    { GIMP_PRECISION_U32, NC_("precision", "32-bit integer"), NULL },
-    { GIMP_PRECISION_HALF, NC_("precision", "16-bit floating point"), NULL },
-    { GIMP_PRECISION_FLOAT, NC_("precision", "32-bit floating point"), NULL },
+    { GIMP_PRECISION_U8_LINEAR, NC_("precision", "8-bit linear integer"), NULL },
+    { GIMP_PRECISION_U8_GAMMA, NC_("precision", "8-bit gamma integer"), NULL },
+    { GIMP_PRECISION_U16_LINEAR, NC_("precision", "16-bit linear integer"), NULL },
+    { GIMP_PRECISION_U16_GAMMA, NC_("precision", "16-bit gamma integer"), NULL },
+    { GIMP_PRECISION_U32_LINEAR, NC_("precision", "32-bit linear integer"), NULL },
+    { GIMP_PRECISION_U32_GAMMA, NC_("precision", "32-bit gamma integer"), NULL },
+    { GIMP_PRECISION_HALF_LINEAR, NC_("precision", "16-bit linear floating point"), NULL },
+    { GIMP_PRECISION_HALF_GAMMA, NC_("precision", "16-bit gamma floating point"), NULL },
+    { GIMP_PRECISION_FLOAT_LINEAR, NC_("precision", "32-bit linear floating point"), NULL },
+    { GIMP_PRECISION_FLOAT_GAMMA, NC_("precision", "32-bit gamma floating point"), NULL },
     { 0, NULL, NULL }
   };
 
@@ -1081,6 +1126,8 @@ gimp_undo_type_get_type (void)
     { GIMP_UNDO_ITEM_DISPLACE, "GIMP_UNDO_ITEM_DISPLACE", "item-displace" },
     { GIMP_UNDO_ITEM_VISIBILITY, "GIMP_UNDO_ITEM_VISIBILITY", "item-visibility" },
     { GIMP_UNDO_ITEM_LINKED, "GIMP_UNDO_ITEM_LINKED", "item-linked" },
+    { GIMP_UNDO_ITEM_LOCK_CONTENT, "GIMP_UNDO_ITEM_LOCK_CONTENT", "item-lock-content" },
+    { GIMP_UNDO_ITEM_LOCK_POSITION, "GIMP_UNDO_ITEM_LOCK_POSITION", "item-lock-position" },
     { GIMP_UNDO_LAYER_ADD, "GIMP_UNDO_LAYER_ADD", "layer-add" },
     { GIMP_UNDO_LAYER_REMOVE, "GIMP_UNDO_LAYER_REMOVE", "layer-remove" },
     { GIMP_UNDO_LAYER_MODE, "GIMP_UNDO_LAYER_MODE", "layer-mode" },
@@ -1091,6 +1138,7 @@ gimp_undo_type_get_type (void)
     { GIMP_UNDO_GROUP_LAYER_CONVERT, "GIMP_UNDO_GROUP_LAYER_CONVERT", "group-layer-convert" },
     { GIMP_UNDO_TEXT_LAYER, "GIMP_UNDO_TEXT_LAYER", "text-layer" },
     { GIMP_UNDO_TEXT_LAYER_MODIFIED, "GIMP_UNDO_TEXT_LAYER_MODIFIED", "text-layer-modified" },
+    { GIMP_UNDO_TEXT_LAYER_CONVERT, "GIMP_UNDO_TEXT_LAYER_CONVERT", "text-layer-convert" },
     { GIMP_UNDO_LAYER_MASK_ADD, "GIMP_UNDO_LAYER_MASK_ADD", "layer-mask-add" },
     { GIMP_UNDO_LAYER_MASK_REMOVE, "GIMP_UNDO_LAYER_MASK_REMOVE", "layer-mask-remove" },
     { GIMP_UNDO_LAYER_MASK_APPLY, "GIMP_UNDO_LAYER_MASK_APPLY", "layer-mask-apply" },
@@ -1168,6 +1216,8 @@ gimp_undo_type_get_type (void)
     { GIMP_UNDO_ITEM_DISPLACE, NC_("undo-type", "Move item"), NULL },
     { GIMP_UNDO_ITEM_VISIBILITY, NC_("undo-type", "Item visibility"), NULL },
     { GIMP_UNDO_ITEM_LINKED, NC_("undo-type", "Link/Unlink item"), NULL },
+    { GIMP_UNDO_ITEM_LOCK_CONTENT, NC_("undo-type", "Lock/Unlock content"), NULL },
+    { GIMP_UNDO_ITEM_LOCK_POSITION, NC_("undo-type", "Lock/Unlock position"), NULL },
     { GIMP_UNDO_LAYER_ADD, NC_("undo-type", "New layer"), NULL },
     { GIMP_UNDO_LAYER_REMOVE, NC_("undo-type", "Delete layer"), NULL },
     { GIMP_UNDO_LAYER_MODE, NC_("undo-type", "Set layer mode"), NULL },
@@ -1178,6 +1228,7 @@ gimp_undo_type_get_type (void)
     { GIMP_UNDO_GROUP_LAYER_CONVERT, NC_("undo-type", "Convert group layer"), NULL },
     { GIMP_UNDO_TEXT_LAYER, NC_("undo-type", "Text layer"), NULL },
     { GIMP_UNDO_TEXT_LAYER_MODIFIED, NC_("undo-type", "Text layer modification"), NULL },
+    { GIMP_UNDO_TEXT_LAYER_CONVERT, NC_("undo-type", "Convert text layer"), NULL },
     { GIMP_UNDO_LAYER_MASK_ADD, NC_("undo-type", "Add layer mask"), NULL },
     { GIMP_UNDO_LAYER_MASK_REMOVE, NC_("undo-type", "Delete layer mask"), NULL },
     { GIMP_UNDO_LAYER_MASK_APPLY, NC_("undo-type", "Apply layer mask"), NULL },
@@ -1226,6 +1277,7 @@ gimp_dirty_mask_get_type (void)
     { GIMP_DIRTY_DRAWABLE, "GIMP_DIRTY_DRAWABLE", "drawable" },
     { GIMP_DIRTY_VECTORS, "GIMP_DIRTY_VECTORS", "vectors" },
     { GIMP_DIRTY_SELECTION, "GIMP_DIRTY_SELECTION", "selection" },
+    { GIMP_DIRTY_ACTIVE_DRAWABLE, "GIMP_DIRTY_ACTIVE_DRAWABLE", "active-drawable" },
     { GIMP_DIRTY_ALL, "GIMP_DIRTY_ALL", "all" },
     { 0, NULL, NULL }
   };
@@ -1242,6 +1294,7 @@ gimp_dirty_mask_get_type (void)
     { GIMP_DIRTY_DRAWABLE, "GIMP_DIRTY_DRAWABLE", NULL },
     { GIMP_DIRTY_VECTORS, "GIMP_DIRTY_VECTORS", NULL },
     { GIMP_DIRTY_SELECTION, "GIMP_DIRTY_SELECTION", NULL },
+    { GIMP_DIRTY_ACTIVE_DRAWABLE, "GIMP_DIRTY_ACTIVE_DRAWABLE", NULL },
     { GIMP_DIRTY_ALL, "GIMP_DIRTY_ALL", NULL },
     { 0, NULL, NULL }
   };

@@ -34,6 +34,8 @@
 #include "core/gimpimage.h"
 #include "core/gimpprogress.h"
 
+#include "widgets/gimpdialogfactory.h"
+
 #include "tools/gimptool.h"
 #include "tools/tool_manager.h"
 
@@ -75,7 +77,7 @@ struct _GimpDisplayPrivate
   GtkWidget *shell;
   GSList    *update_areas;
 
-  GTimeVal   last_flush_now;
+  guint64    last_flush_now;
 };
 
 #define GIMP_DISPLAY_GET_PRIVATE(display) \
@@ -452,6 +454,11 @@ gimp_display_new (Gimp              *gimp,
 
   gimp_image_window_add_shell (window, shell);
   gimp_display_shell_present (shell);
+
+  /* make sure the docks are visible, in case all other image windows
+   * are iconified, see bug #686544.
+   */
+  gimp_dialog_factory_show_with_display (dialog_factory);
 
   g_signal_connect (gimp_display_shell_get_statusbar (shell), "cancel",
                     G_CALLBACK (gimp_display_progress_canceled),
@@ -838,21 +845,13 @@ gimp_display_flush_whenever (GimpDisplay *display,
 
   if (now)
     {
-      GTimeVal time_now;
-      gint     diff_usec;
+      guint64 now = g_get_monotonic_time ();
 
-      g_get_current_time (&time_now);
-
-      diff_usec = (((guint64) time_now.tv_sec * G_USEC_PER_SEC +
-                    (guint64) time_now.tv_usec) -
-                   ((guint64) private->last_flush_now.tv_sec * G_USEC_PER_SEC +
-                    (guint64) private->last_flush_now.tv_usec));
-
-      if (diff_usec > FLUSH_NOW_INTERVAL)
+      if ((now - private->last_flush_now) > FLUSH_NOW_INTERVAL)
         {
           gimp_display_shell_flush (gimp_display_get_shell (display), now);
 
-          g_get_current_time (&private->last_flush_now);
+          private->last_flush_now = now;
         }
     }
   else
@@ -887,13 +886,14 @@ gimp_display_paint_area (GimpDisplay *display,
   h = (y2 - y1);
 
   /*  display the area  */
-  gimp_display_shell_transform_xy_f (shell, x,     y,     &x1_f, &y1_f);
-  gimp_display_shell_transform_xy_f (shell, x + w, y + h, &x2_f, &y2_f);
+  gimp_display_shell_transform_bounds (shell,
+                                       x, y, x + w, y + h,
+                                       &x1_f, &y1_f, &x2_f, &y2_f);
 
   /*  make sure to expose a superset of the transformed sub-pixel expose
    *  area, not a subset. bug #126942. --mitch
    *
-   *  also acommodate for spill introduced by potential box filtering.
+   *  also accommodate for spill introduced by potential box filtering.
    *  (bug #474509). --simon
    */
   x1 = floor (x1_f - 0.5);

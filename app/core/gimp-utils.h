@@ -23,7 +23,7 @@
   { GTimer *_timer = g_timer_new ();
 
 #define GIMP_TIMER_END(message) \
-  g_printerr ("%s: %s took %0.2f seconds\n", \
+  g_printerr ("%s: %s took %0.4f seconds\n", \
               G_STRFUNC, message, g_timer_elapsed (_timer, NULL)); \
   g_timer_destroy (_timer); }
 
@@ -59,7 +59,6 @@ gint64       gimp_parasite_get_memsize             (GimpParasite    *parasite,
                                                     gint64          *gui_size);
 
 gint         gimp_get_pid                          (void);
-gint         gimp_get_number_of_processors         (void);
 guint64      gimp_get_physical_memory_size         (void);
 gchar      * gimp_get_backtrace                    (void);
 gchar      * gimp_get_default_language             (const gchar     *category);
@@ -93,6 +92,9 @@ void         gimp_constrain_line                   (gdouble          start_x,
                                                     gdouble         *end_x,
                                                     gdouble         *end_y,
                                                     gint             n_snap_lines);
+
+void         gimp_create_image_from_buffer         (Gimp            *gimp,
+                                                    GeglBuffer      *buffer);
 
 
 #endif /* __APP_GIMP_UTILS_H__ */

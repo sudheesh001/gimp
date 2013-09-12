@@ -17,30 +17,36 @@
 
 #include "config.h"
 
+#include <cairo.h>
 #include <gegl.h>
 
 #include "core-types.h"
 
-#include "base/tile.h"
-#include "base/tile-rowhints.h" /* EEK */
-#include "base/tile-private.h"  /* EEK */
-#include "base/tile-manager.h"
-#include "base/tile-pyramid.h"
-
+#include "gegl/gimp-babl.h"
 #include "gegl/gimp-gegl-utils.h"
+#include "gegl/gimptilehandlerprojection.h"
 
 #include "gimp.h"
+#include "gimp-utils.h"
 #include "gimparea.h"
 #include "gimpimage.h"
 #include "gimpmarshal.h"
 #include "gimppickable.h"
 #include "gimpprojectable.h"
 #include "gimpprojection.h"
-#include "gimpprojection-construct.h"
+
+#include "gimp-log.h"
 
 
-/*  halfway between G_PRIORITY_HIGH_IDLE and G_PRIORITY_DEFAULT_IDLE  */
-#define  GIMP_PROJECTION_IDLE_PRIORITY  150
+/*  just a bit less than GDK_PRIORITY_REDRAW  */
+#define GIMP_PROJECTION_IDLE_PRIORITY (G_PRIORITY_HIGH_IDLE + 20 + 1)
+
+/*  chunk size for one iteration of the chunk renderer  */
+#define GIMP_PROJECTION_CHUNK_WIDTH  256
+#define GIMP_PROJECTION_CHUNK_HEIGHT 128
+
+/*  how much time, in seconds, do we allow chunk rendering to take  */
+#define GIMP_PROJECTION_CHUNK_TIME 0.01
 
 
 enum
@@ -49,12 +55,26 @@ enum
   LAST_SIGNAL
 };
 
+enum
+{
+  PROP_0,
+  PROP_BUFFER
+};
+
 
 /*  local function prototypes  */
 
 static void   gimp_projection_pickable_iface_init (GimpPickableInterface  *iface);
 
 static void        gimp_projection_finalize              (GObject         *object);
+static void        gimp_projection_set_property          (GObject         *object,
+                                                          guint            property_id,
+                                                          const GValue    *value,
+                                                          GParamSpec      *pspec);
+static void        gimp_projection_get_property          (GObject         *object,
+                                                          guint            property_id,
+                                                          GValue          *value,
+                                                          GParamSpec      *pspec);
 
 static gint64      gimp_projection_get_memsize           (GimpObject      *object,
                                                           gint64          *gui_size);
@@ -62,7 +82,7 @@ static gint64      gimp_projection_get_memsize           (GimpObject      *objec
 static void        gimp_projection_pickable_flush        (GimpPickable    *pickable);
 static GimpImage * gimp_projection_get_image             (GimpPickable    *pickable);
 static const Babl * gimp_projection_get_format           (GimpPickable    *pickable);
-static GeglBuffer  * gimp_projection_get_buffer          (GimpPickable    *pickable);
+static GeglBuffer * gimp_projection_get_buffer           (GimpPickable    *pickable);
 static gboolean    gimp_projection_get_pixel_at          (GimpPickable    *pickable,
                                                           gint             x,
                                                           gint             y,
@@ -72,6 +92,7 @@ static gdouble     gimp_projection_get_opacity_at        (GimpPickable    *picka
                                                           gint             x,
                                                           gint             y);
 
+static void        gimp_projection_free_buffer           (GimpProjection  *proj);
 static void        gimp_projection_add_update_area       (GimpProjection  *proj,
                                                           gint             x,
                                                           gint             y,
@@ -79,23 +100,18 @@ static void        gimp_projection_add_update_area       (GimpProjection  *proj,
                                                           gint             h);
 static void        gimp_projection_flush_whenever        (GimpProjection  *proj,
                                                           gboolean         now);
-static void        gimp_projection_idle_render_init      (GimpProjection  *proj);
-static gboolean    gimp_projection_idle_render_callback  (gpointer         data);
-static gboolean    gimp_projection_idle_render_next_area (GimpProjection  *proj);
+static void        gimp_projection_chunk_render_start    (GimpProjection  *proj);
+static void        gimp_projection_chunk_render_stop     (GimpProjection  *proj);
+static gboolean    gimp_projection_chunk_render_callback (gpointer         data);
+static void        gimp_projection_chunk_render_init     (GimpProjection  *proj);
+static gboolean    gimp_projection_chunk_render_iteration(GimpProjection  *proj);
+static gboolean    gimp_projection_chunk_render_next_area(GimpProjection  *proj);
 static void        gimp_projection_paint_area            (GimpProjection  *proj,
                                                           gboolean         now,
                                                           gint             x,
                                                           gint             y,
                                                           gint             w,
                                                           gint             h);
-static void        gimp_projection_invalidate            (GimpProjection  *proj,
-                                                          guint            x,
-                                                          guint            y,
-                                                          guint            w,
-                                                          guint            h);
-static void        gimp_projection_validate_tile         (TileManager     *tm,
-                                                          Tile            *tile,
-                                                          GimpProjection  *proj);
 
 static void        gimp_projection_projectable_invalidate(GimpProjectable *projectable,
                                                           gint             x,
@@ -140,19 +156,17 @@ gimp_projection_class_init (GimpProjectionClass *klass)
                   G_TYPE_INT);
 
   object_class->finalize         = gimp_projection_finalize;
+  object_class->set_property     = gimp_projection_set_property;
+  object_class->get_property     = gimp_projection_get_property;
 
   gimp_object_class->get_memsize = gimp_projection_get_memsize;
+
+  g_object_class_override_property (object_class, PROP_BUFFER, "buffer");
 }
 
 static void
 gimp_projection_init (GimpProjection *proj)
 {
-  proj->projectable              = NULL;
-  proj->pyramid                  = NULL;
-  proj->buffer                   = NULL;
-  proj->update_areas             = NULL;
-  proj->idle_render.idle_id      = 0;
-  proj->idle_render.update_areas = NULL;
 }
 
 static void
@@ -172,44 +186,53 @@ gimp_projection_finalize (GObject *object)
 {
   GimpProjection *proj = GIMP_PROJECTION (object);
 
-  if (proj->idle_render.idle_id)
-    {
-      g_source_remove (proj->idle_render.idle_id);
-      proj->idle_render.idle_id = 0;
-    }
+  if (proj->chunk_render.running)
+    gimp_projection_chunk_render_stop (proj);
 
   gimp_area_list_free (proj->update_areas);
   proj->update_areas = NULL;
 
-  gimp_area_list_free (proj->idle_render.update_areas);
-  proj->idle_render.update_areas = NULL;
+  gimp_area_list_free (proj->chunk_render.update_areas);
+  proj->chunk_render.update_areas = NULL;
 
-  if (proj->pyramid)
-    {
-      tile_pyramid_destroy (proj->pyramid);
-      proj->pyramid = NULL;
-    }
-
-  if (proj->buffer)
-    {
-      g_object_unref (proj->buffer);
-      proj->buffer = NULL;
-    }
-
-  if (proj->graph)
-    {
-      g_object_unref (proj->graph);
-      proj->graph     = NULL;
-      proj->sink_node = NULL;
-    }
-
-  if (proj->processor)
-    {
-      g_object_unref (proj->processor);
-      proj->processor = NULL;
-    }
+  gimp_projection_free_buffer (proj);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
+}
+
+static void
+gimp_projection_set_property (GObject      *object,
+                              guint         property_id,
+                              const GValue *value,
+                              GParamSpec   *pspec)
+{
+  switch (property_id)
+    {
+    case PROP_BUFFER:
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+      break;
+    }
+}
+
+static void
+gimp_projection_get_property (GObject    *object,
+                              guint       property_id,
+                              GValue     *value,
+                              GParamSpec *pspec)
+{
+  GimpProjection *projection = GIMP_PROJECTION (object);
+
+  switch (property_id)
+    {
+    case PROP_BUFFER:
+      g_value_set_object (value, projection->buffer);
+      break;
+
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+      break;
+    }
 }
 
 static gint64
@@ -219,8 +242,7 @@ gimp_projection_get_memsize (GimpObject *object,
   GimpProjection *projection = GIMP_PROJECTION (object);
   gint64          memsize    = 0;
 
-  if (projection->pyramid)
-    memsize = tile_pyramid_get_memsize (projection->pyramid);
+  memsize += gimp_gegl_buffer_get_memsize (projection->buffer);
 
   return memsize + GIMP_OBJECT_CLASS (parent_class)->get_memsize (object,
                                                                   gui_size);
@@ -228,9 +250,10 @@ gimp_projection_get_memsize (GimpObject *object,
 
 /**
  * gimp_projection_estimate_memsize:
- * @type:   the image base type
- * @width:  projection width
- * @height: projection height
+ * @type:      the projectable's base type
+ * @precision: the projectable's precision
+ * @width:     projection width
+ * @height:    projection height
  *
  * Calculates a rough estimate of the memory that is required for the
  * projection of an image with the given @width and @height.
@@ -239,22 +262,18 @@ gimp_projection_get_memsize (GimpObject *object,
  **/
 gint64
 gimp_projection_estimate_memsize (GimpImageBaseType type,
+                                  GimpPrecision     precision,
                                   gint              width,
                                   gint              height)
 {
-  gint64 bytes = 0;
+  const Babl *format;
+  gint64      bytes;
 
-  switch (type)
-    {
-    case GIMP_RGB:
-    case GIMP_INDEXED:
-      bytes = 4;
-      break;
+  if (type == GIMP_INDEXED)
+    type = GIMP_RGB;
 
-    case GIMP_GRAY:
-      bytes = 2;
-      break;
-    }
+  format = gimp_babl_format (type, precision, TRUE);
+  bytes  = babl_format_get_bytes_per_pixel (format);
 
   /* The pyramid levels constitute a geometric sum with a ratio of 1/4. */
   return bytes * (gint64) width * (gint64) height * 1.33;
@@ -265,6 +284,9 @@ static void
 gimp_projection_pickable_flush (GimpPickable *pickable)
 {
   GimpProjection *proj = GIMP_PROJECTION (pickable);
+
+  /* create the buffer if it doesn't exist */
+  gimp_projection_get_buffer (pickable);
 
   gimp_projection_finish_draw (proj);
   gimp_projection_flush_now (proj);
@@ -303,17 +325,34 @@ gimp_projection_get_buffer (GimpPickable *pickable)
 
   if (! proj->buffer)
     {
-      TileManager *tiles  = gimp_projection_get_tiles_at_level (proj, 0, NULL);
-      const Babl  *format = gimp_projection_get_format (pickable);
+      GeglNode   *graph;
+      const Babl *format;
+      gint        width;
+      gint        height;
 
-      proj->buffer = gimp_tile_manager_create_buffer (tiles, format);
+      graph = gimp_projectable_get_graph (proj->projectable);
+      format = gimp_projection_get_format (GIMP_PICKABLE (proj));
+      gimp_projectable_get_size (proj->projectable, &width, &height);
 
-      if (proj->sink_node)
-        {
-          gegl_node_set (proj->sink_node,
-                         "buffer", proj->buffer,
-                         NULL);
-        }
+      proj->buffer = gegl_buffer_new (GEGL_RECTANGLE (0, 0, width, height),
+                                      format);
+
+      proj->validate_handler = gimp_tile_handler_projection_new (graph,
+                                                                 width, height);
+      gegl_buffer_add_handler (proj->buffer, proj->validate_handler);
+
+      /*  This used to call gimp_tile_handler_projection_invalidate()
+       *  which forced the entire projection to be constructed in one
+       *  go for new images, causing a potentially huge delay. Now we
+       *  initially validate stuff the normal way, which makes the
+       *  image appear incrementally, but it keeps everything
+       *  responsive.
+       */
+      gimp_projection_add_update_area (proj, 0, 0, width, height);
+      proj->invalidate_preview = TRUE;
+      gimp_projection_flush (proj);
+
+      g_object_notify (G_OBJECT (pickable), "buffer");
     }
 
   return proj->buffer;
@@ -372,97 +411,12 @@ gimp_projection_new (GimpProjectable *projectable)
   return proj;
 }
 
-GeglNode *
-gimp_projection_get_sink_node (GimpProjection *proj)
-{
-  GeglNode   *graph;
-  GeglBuffer *buffer;
-
-  g_return_val_if_fail (GIMP_IS_PROJECTION (proj), NULL);
-
-  if (proj->sink_node)
-    return proj->sink_node;
-
-  proj->graph = gegl_node_new ();
-
-  g_object_set (proj->graph,
-                "dont-cache", TRUE,
-                NULL);
-
-  graph = gimp_projectable_get_graph (proj->projectable);
-  gegl_node_add_child (proj->graph, graph);
-
-  buffer = gimp_projection_get_buffer (GIMP_PICKABLE (proj));
-
-  proj->sink_node =
-    gegl_node_new_child (proj->graph,
-                         "operation", "gegl:write-buffer",
-                         "buffer",    buffer,
-                         NULL);
-
-  gegl_node_connect_to (graph,           "output",
-                        proj->sink_node, "input");
-
-  return proj->sink_node;
-}
-
-TileManager *
-gimp_projection_get_tiles_at_level (GimpProjection *proj,
-                                    gint            level,
-                                    gboolean       *is_premult)
-{
-  g_return_val_if_fail (GIMP_IS_PROJECTION (proj), NULL);
-
-  if (! proj->pyramid)
-    {
-      const Babl *format;
-      gint        bytes;
-      gint        width;
-      gint        height;
-
-      format = gimp_projection_get_format (GIMP_PICKABLE (proj));
-
-      bytes = babl_format_get_bytes_per_pixel (format);
-      gimp_projectable_get_size (proj->projectable, &width, &height);
-
-      proj->pyramid = tile_pyramid_new (bytes, width, height);
-
-      tile_pyramid_set_validate_proc (proj->pyramid,
-                                      (TileValidateProc) gimp_projection_validate_tile,
-                                      proj);
-    }
-
-  return tile_pyramid_get_tiles (proj->pyramid, level, is_premult);
-}
-
-/**
- * gimp_projection_get_level:
- * @proj:    pointer to a GimpProjection
- * @scale_x: horizontal scale factor
- * @scale_y: vertical scale factor
- *
- * This function returns the optimal pyramid level for a given scale factor.
- *
- * Return value: the pyramid level to use for a given display scale factor.
- **/
-gint
-gimp_projection_get_level (GimpProjection *proj,
-                           gdouble         scale_x,
-                           gdouble         scale_y)
-{
-  gint width, height;
-
-  gimp_projectable_get_size (proj->projectable, &width, &height);
-
-  return tile_pyramid_get_level (width, height, MAX (scale_x, scale_y));
-}
-
 void
 gimp_projection_flush (GimpProjection *proj)
 {
   g_return_if_fail (GIMP_IS_PROJECTION (proj));
 
-  /* Construct on idle time */
+  /* Construct in chunks */
   gimp_projection_flush_whenever (proj, FALSE);
 }
 
@@ -480,21 +434,35 @@ gimp_projection_finish_draw (GimpProjection *proj)
 {
   g_return_if_fail (GIMP_IS_PROJECTION (proj));
 
-  if (proj->idle_render.idle_id)
+  if (proj->chunk_render.running)
     {
-#if 0
-      g_printerr ("%s: flushing idle render queue\n", G_STRFUNC);
-#endif
+      gimp_projection_chunk_render_stop (proj);
 
-      g_source_remove (proj->idle_render.idle_id);
-      proj->idle_render.idle_id = 0;
-
-      while (gimp_projection_idle_render_callback (proj));
+      while (gimp_projection_chunk_render_iteration (proj));
     }
 }
 
 
 /*  private functions  */
+
+static void
+gimp_projection_free_buffer (GimpProjection  *proj)
+{
+  if (proj->buffer)
+    {
+      if (proj->validate_handler)
+        gegl_buffer_remove_handler (proj->buffer, proj->validate_handler);
+
+      g_object_unref (proj->buffer);
+      proj->buffer = NULL;
+    }
+
+  if (proj->validate_handler)
+    {
+      g_object_unref (proj->validate_handler);
+      proj->validate_handler = NULL;
+    }
+}
 
 static void
 gimp_projection_add_update_area (GimpProjection *proj,
@@ -553,7 +521,7 @@ gimp_projection_flush_whenever (GimpProjection *proj,
         }
       else  /* Asynchronous */
         {
-          gimp_projection_idle_render_init (proj);
+          gimp_projection_chunk_render_init (proj);
         }
 
       /*  Free the update lists  */
@@ -572,111 +540,152 @@ gimp_projection_flush_whenever (GimpProjection *proj,
 }
 
 static void
-gimp_projection_idle_render_init (GimpProjection *proj)
+gimp_projection_chunk_render_start (GimpProjection *proj)
+{
+  g_return_if_fail (proj->chunk_render.running == FALSE);
+
+  proj->chunk_render_idle_id =
+    g_idle_add_full (GIMP_PROJECTION_IDLE_PRIORITY,
+                     gimp_projection_chunk_render_callback, proj,
+                     NULL);
+
+  proj->chunk_render.running = TRUE;
+}
+
+static void
+gimp_projection_chunk_render_stop (GimpProjection *proj)
+{
+  g_return_if_fail (proj->chunk_render.running == TRUE);
+
+  g_source_remove (proj->chunk_render_idle_id);
+  proj->chunk_render_idle_id = 0;
+
+  proj->chunk_render.running = FALSE;
+}
+
+static gboolean
+gimp_projection_chunk_render_callback (gpointer data)
+{
+  GimpProjection *proj   = data;
+  GTimer         *timer  = g_timer_new ();
+  gint            chunks = 0;
+  gboolean        retval = TRUE;
+
+  do
+    {
+      if (! gimp_projection_chunk_render_iteration (proj))
+        {
+          gimp_projection_chunk_render_stop (proj);
+
+          retval = FALSE;
+
+          break;
+        }
+
+      chunks++;
+    }
+  while (g_timer_elapsed (timer, NULL) < GIMP_PROJECTION_CHUNK_TIME);
+
+  GIMP_LOG (PROJECTION, "%d chunks in %f seconds\n",
+            chunks, g_timer_elapsed (timer, NULL));
+  g_timer_destroy (timer);
+
+  return retval;
+}
+
+static void
+gimp_projection_chunk_render_init (GimpProjection *proj)
 {
   GSList *list;
 
-  /* We need to merge the IdleRender's and the GimpProjection's update_areas
-   * list to keep track of which of the updates have been flushed and hence
-   * need to be drawn.
+  /* We need to merge the ChunkRender's and the GimpProjection's
+   * update_areas list to keep track of which of the updates have been
+   * flushed and hence need to be drawn.
    */
   for (list = proj->update_areas; list; list = g_slist_next (list))
     {
       GimpArea *area = list->data;
 
-      proj->idle_render.update_areas =
-        gimp_area_list_process (proj->idle_render.update_areas,
+      proj->chunk_render.update_areas =
+        gimp_area_list_process (proj->chunk_render.update_areas,
                                 gimp_area_new (area->x1, area->y1,
                                                area->x2, area->y2));
     }
 
-  /* If an idlerender was already running, merge the remainder of its
-   * unrendered area with the update_areas list, and make it start work
-   * on the next unrendered area in the list.
+  /* If a chunk renderer was already running, merge the remainder of
+   * its unrendered area with the update_areas list, and make it start
+   * work on the next unrendered area in the list.
    */
-  if (proj->idle_render.idle_id)
+  if (proj->chunk_render.running)
     {
       GimpArea *area =
-        gimp_area_new (proj->idle_render.base_x,
-                       proj->idle_render.y,
-                       proj->idle_render.base_x + proj->idle_render.width,
-                       proj->idle_render.y + (proj->idle_render.height -
-                                               (proj->idle_render.y -
-                                                proj->idle_render.base_y)));
+        gimp_area_new (proj->chunk_render.base_x,
+                       proj->chunk_render.y,
+                       proj->chunk_render.base_x + proj->chunk_render.width,
+                       proj->chunk_render.y + (proj->chunk_render.height -
+                                               (proj->chunk_render.y -
+                                                proj->chunk_render.base_y)));
 
-      proj->idle_render.update_areas =
-        gimp_area_list_process (proj->idle_render.update_areas, area);
+      proj->chunk_render.update_areas =
+        gimp_area_list_process (proj->chunk_render.update_areas, area);
 
-      gimp_projection_idle_render_next_area (proj);
+      gimp_projection_chunk_render_next_area (proj);
     }
   else
     {
-      if (proj->idle_render.update_areas == NULL)
+      if (proj->chunk_render.update_areas == NULL)
         {
-          g_warning ("%s: wanted to start idle render with no update_areas",
+          g_warning ("%s: wanted to start chunk render with no update_areas",
                      G_STRFUNC);
           return;
         }
 
-      gimp_projection_idle_render_next_area (proj);
+      gimp_projection_chunk_render_next_area (proj);
 
-      proj->idle_render.idle_id =
-        g_idle_add_full (GIMP_PROJECTION_IDLE_PRIORITY,
-                         gimp_projection_idle_render_callback, proj,
-                         NULL);
+      gimp_projection_chunk_render_start (proj);
     }
 }
 
 /* Unless specified otherwise, projection re-rendering is organised by
- * IdleRender, which amalgamates areas to be re-rendered and breaks
- * them into bite-sized chunks which are chewed on in a low- priority
- * idle thread.  This greatly improves responsiveness for many GIMP
+ * ChunkRender, which amalgamates areas to be re-rendered and breaks
+ * them into bite-sized chunks which are chewed on in an idle
+ * function. This greatly improves responsiveness for many GIMP
  * operations.  -- Adam
  */
 static gboolean
-gimp_projection_idle_render_callback (gpointer data)
+gimp_projection_chunk_render_iteration (GimpProjection *proj)
 {
-  GimpProjection *proj = data;
-  gint            workx, worky;
-  gint            workw, workh;
+  gint workx = proj->chunk_render.x;
+  gint worky = proj->chunk_render.y;
+  gint workw = GIMP_PROJECTION_CHUNK_WIDTH;
+  gint workh = GIMP_PROJECTION_CHUNK_HEIGHT;
 
-#define CHUNK_WIDTH  256
-#define CHUNK_HEIGHT 128
-
-  workw = CHUNK_WIDTH;
-  workh = CHUNK_HEIGHT;
-  workx = proj->idle_render.x;
-  worky = proj->idle_render.y;
-
-  if (workx + workw > proj->idle_render.base_x + proj->idle_render.width)
+  if (workx + workw > proj->chunk_render.base_x + proj->chunk_render.width)
     {
-      workw = proj->idle_render.base_x + proj->idle_render.width - workx;
+      workw = proj->chunk_render.base_x + proj->chunk_render.width - workx;
     }
 
-  if (worky + workh > proj->idle_render.base_y + proj->idle_render.height)
+  if (worky + workh > proj->chunk_render.base_y + proj->chunk_render.height)
     {
-      workh = proj->idle_render.base_y + proj->idle_render.height - worky;
+      workh = proj->chunk_render.base_y + proj->chunk_render.height - worky;
     }
 
   gimp_projection_paint_area (proj, TRUE /* sic! */,
                               workx, worky, workw, workh);
 
-  proj->idle_render.x += CHUNK_WIDTH;
+  proj->chunk_render.x += GIMP_PROJECTION_CHUNK_WIDTH;
 
-  if (proj->idle_render.x >=
-      proj->idle_render.base_x + proj->idle_render.width)
+  if (proj->chunk_render.x >=
+      proj->chunk_render.base_x + proj->chunk_render.width)
     {
-      proj->idle_render.x = proj->idle_render.base_x;
-      proj->idle_render.y += CHUNK_HEIGHT;
+      proj->chunk_render.x = proj->chunk_render.base_x;
+      proj->chunk_render.y += GIMP_PROJECTION_CHUNK_HEIGHT;
 
-      if (proj->idle_render.y >=
-          proj->idle_render.base_y + proj->idle_render.height)
+      if (proj->chunk_render.y >=
+          proj->chunk_render.base_y + proj->chunk_render.height)
         {
-          if (! gimp_projection_idle_render_next_area (proj))
+          if (! gimp_projection_chunk_render_next_area (proj))
             {
-              /* FINISHED */
-              proj->idle_render.idle_id = 0;
-
               if (proj->invalidate_preview)
                 {
                   /* invalidate the preview here since it is constructed from
@@ -687,6 +696,7 @@ gimp_projection_idle_render_callback (gpointer data)
                   gimp_projectable_invalidate_preview (proj->projectable);
                 }
 
+              /* FINISHED */
               return FALSE;
             }
         }
@@ -697,22 +707,22 @@ gimp_projection_idle_render_callback (gpointer data)
 }
 
 static gboolean
-gimp_projection_idle_render_next_area (GimpProjection *proj)
+gimp_projection_chunk_render_next_area (GimpProjection *proj)
 {
   GimpArea *area;
 
-  if (! proj->idle_render.update_areas)
+  if (! proj->chunk_render.update_areas)
     return FALSE;
 
-  area = proj->idle_render.update_areas->data;
+  area = proj->chunk_render.update_areas->data;
 
-  proj->idle_render.update_areas =
-    g_slist_remove (proj->idle_render.update_areas, area);
+  proj->chunk_render.update_areas =
+    g_slist_remove (proj->chunk_render.update_areas, area);
 
-  proj->idle_render.x      = proj->idle_render.base_x = area->x1;
-  proj->idle_render.y      = proj->idle_render.base_y = area->y1;
-  proj->idle_render.width  = area->x2 - area->x1;
-  proj->idle_render.height = area->y2 - area->y1;
+  proj->chunk_render.x      = proj->chunk_render.base_x = area->x1;
+  proj->chunk_render.y      = proj->chunk_render.base_y = area->y1;
+  proj->chunk_render.width  = area->x2 - area->x1;
+  proj->chunk_render.height = area->y2 - area->y1;
 
   gimp_area_free (area);
 
@@ -740,7 +750,20 @@ gimp_projection_paint_area (GimpProjection *proj,
   x2 = CLAMP (x + w, 0, width);
   y2 = CLAMP (y + h, 0, height);
 
-  gimp_projection_invalidate (proj, x1, y1, x2 - x1, y2 - y1);
+  if (proj->validate_handler)
+    gimp_tile_handler_projection_invalidate (proj->validate_handler,
+                                             x1, y1, x2 - x1, y2 - y1);
+  if (now)
+    {
+      GeglNode *graph = gimp_projectable_get_graph (proj->projectable);
+
+      if (proj->validate_handler)
+        gimp_tile_handler_projection_undo_invalidate (proj->validate_handler,
+                                                      x1, y1, x2 - x1, y2 - y1);
+
+      gegl_node_blit_buffer (graph, proj->buffer,
+                             GEGL_RECTANGLE (x1, y1, x2 - x1, y2 - y1));
+    }
 
   /*  add the projectable's offsets because the list of update areas
    *  is in tile-pyramid coordinates, but our external API is always
@@ -754,89 +777,6 @@ gimp_projection_paint_area (GimpProjection *proj,
                  y2 - y1);
 }
 
-static void
-gimp_projection_invalidate (GimpProjection *proj,
-                            guint           x,
-                            guint           y,
-                            guint           w,
-                            guint           h)
-{
-  if (proj->pyramid)
-    {
-      if (proj->sink_node)
-        {
-          GeglBuffer *buffer;
-
-          buffer = gimp_projection_get_buffer (GIMP_PICKABLE (proj));
-
-          /* makes the buffer drop all GimpTiles */
-          gimp_gegl_buffer_refetch_tiles (buffer);
-        }
-
-      tile_pyramid_invalidate_area (proj->pyramid, x, y, w, h);
-    }
-}
-
-static void
-gimp_projection_validate_tile (TileManager    *tm,
-                               Tile           *tile,
-                               GimpProjection *proj)
-{
-  Tile *additional[7];
-  gint  n_additional = 0;
-  gint  x, y;
-  gint  width, height;
-  gint  tile_width, tile_height;
-  gint  col, row;
-  gint  i;
-
-  /*  Find the coordinates of this tile  */
-  tile_manager_get_tile_coordinates (tm, tile, &x, &y);
-
-  width  = tile_width  = tile_ewidth (tile);
-  height = tile_height = tile_eheight (tile);
-
-  tile_manager_get_tile_col_row (tm, tile, &col, &row);
-
-  /*  try to validate up to 8 invalid tiles in a row  */
-  while (tile_width == TILE_WIDTH && n_additional < 7)
-    {
-      Tile *t;
-
-      col++;
-
-      /*  get the next tile without any read or write access, so it
-       *  won't be locked (and validated)
-       */
-      t = tile_manager_get_at (tm, col, row, FALSE, FALSE);
-
-      /*  if we hit the right border, or a valid tile, bail out
-       */
-      if (! t || tile_is_valid (t))
-        break;
-
-      /*  HACK: mark the tile as valid, so locking it with r/w access
-       *  won't validate it
-       */
-      t->valid = TRUE;
-      t = tile_manager_get_at (tm, col, row, TRUE, TRUE);
-
-      /*  add the tile's width to the chunk to validate  */
-      tile_width = tile_ewidth (t);
-      width += tile_width;
-
-      additional[n_additional++] = t;
-    }
-
-  gimp_projection_construct (proj, x, y, width, height);
-
-  for (i = 0; i < n_additional; i++)
-    {
-      /*  HACK: mark the tile as valid, because we know it is  */
-      additional[i]->valid = TRUE;
-      tile_release (additional[i], TRUE);
-    }
-}
 
 /*  image callbacks  */
 
@@ -869,26 +809,13 @@ gimp_projection_projectable_changed (GimpProjectable *projectable,
   gint off_x, off_y;
   gint width, height;
 
-  if (proj->idle_render.idle_id)
-    {
-      g_source_remove (proj->idle_render.idle_id);
-      proj->idle_render.idle_id = 0;
-    }
+  if (proj->chunk_render.running)
+    gimp_projection_chunk_render_stop (proj);
 
   gimp_area_list_free (proj->update_areas);
   proj->update_areas = NULL;
 
-  if (proj->pyramid)
-    {
-      tile_pyramid_destroy (proj->pyramid);
-      proj->pyramid = NULL;
-    }
-
-  if (proj->buffer)
-    {
-      g_object_unref (proj->buffer);
-      proj->buffer = NULL;
-    }
+  gimp_projection_free_buffer (proj);
 
   gimp_projectable_get_offset (proj->projectable, &off_x, &off_y);
   gimp_projectable_get_size (projectable, &width, &height);

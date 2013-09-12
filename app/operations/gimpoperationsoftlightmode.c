@@ -29,7 +29,6 @@
 #include "gimpoperationsoftlightmode.h"
 
 
-static void     gimp_operation_softlight_mode_prepare (GeglOperation       *operation);
 static gboolean gimp_operation_softlight_mode_process (GeglOperation       *operation,
                                                        void                *in_buf,
                                                        void                *aux_buf,
@@ -42,6 +41,22 @@ static gboolean gimp_operation_softlight_mode_process (GeglOperation       *oper
 
 G_DEFINE_TYPE (GimpOperationSoftlightMode, gimp_operation_softlight_mode,
                GIMP_TYPE_OPERATION_POINT_LAYER_MODE)
+
+static const gchar* reference_xml = "<?xml version='1.0' encoding='UTF-8'?>"
+"<gegl>"
+"<node operation='gimp:softlight-mode'>"
+"  <node operation='gegl:load'>"
+"    <params>"
+"      <param name='path'>B.png</param>"
+"    </params>"
+"  </node>"
+"</node>"
+"<node operation='gegl:load'>"
+"  <params>"
+"    <param name='path'>A.png</param>"
+"  </params>"
+"</node>"
+"</gegl>";
 
 
 static void
@@ -56,26 +71,16 @@ gimp_operation_softlight_mode_class_init (GimpOperationSoftlightModeClass *klass
   gegl_operation_class_set_keys (operation_class,
                                  "name",        "gimp:softlight-mode",
                                  "description", "GIMP softlight mode operation",
+                                 "reference-image", "soft-light-mode.png",
+                                 "reference-composition", reference_xml,
                                  NULL);
 
-  operation_class->prepare = gimp_operation_softlight_mode_prepare;
-  point_class->process     = gimp_operation_softlight_mode_process;
+  point_class->process = gimp_operation_softlight_mode_process;
 }
 
 static void
 gimp_operation_softlight_mode_init (GimpOperationSoftlightMode *self)
 {
-}
-
-static void
-gimp_operation_softlight_mode_prepare (GeglOperation *operation)
-{
-  const Babl *format = babl_format ("R'G'B'A float");
-
-  gegl_operation_set_format (operation, "input",  format);
-  gegl_operation_set_format (operation, "aux",    format);
-  gegl_operation_set_format (operation, "aux2",   babl_format ("Y float"));
-  gegl_operation_set_format (operation, "output", format);
 }
 
 static gboolean
@@ -88,11 +93,21 @@ gimp_operation_softlight_mode_process (GeglOperation       *operation,
                                        const GeglRectangle *roi,
                                        gint                 level)
 {
-  gdouble        opacity  = GIMP_OPERATION_POINT_LAYER_MODE (operation)->opacity;
-  gfloat        *in       = in_buf;
-  gfloat        *layer    = aux_buf;
-  gfloat        *mask     = aux2_buf;
-  gfloat        *out      = out_buf;
+  gfloat opacity = GIMP_OPERATION_POINT_LAYER_MODE (operation)->opacity;
+
+  return gimp_operation_softlight_mode_process_pixels (in_buf, aux_buf, aux2_buf, out_buf, opacity, samples, roi, level);
+}
+
+gboolean
+gimp_operation_softlight_mode_process_pixels (gfloat              *in,
+                                              gfloat              *layer,
+                                              gfloat              *mask,
+                                              gfloat              *out,
+                                              gfloat               opacity,
+                                              glong                samples,
+                                              const GeglRectangle *roi,
+                                              gint                 level)
+{
   const gboolean has_mask = mask != NULL;
 
   while (samples--)

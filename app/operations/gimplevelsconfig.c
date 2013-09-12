@@ -83,7 +83,7 @@ static gboolean gimp_levels_config_copy         (GimpConfig       *src,
 
 
 G_DEFINE_TYPE_WITH_CODE (GimpLevelsConfig, gimp_levels_config,
-                         GIMP_TYPE_IMAGE_MAP_CONFIG,
+                         GIMP_TYPE_SETTINGS,
                          G_IMPLEMENT_INTERFACE (GIMP_TYPE_CONFIG,
                                                 gimp_levels_config_iface_init))
 
@@ -255,7 +255,18 @@ gimp_levels_config_serialize (GimpConfig       *config,
     {
       l_config->channel = channel;
 
-      success = gimp_config_serialize_properties (config, writer);
+      /*  serialize the channel properties manually (not using
+       *  gimp_config_serialize_properties()), so the parent class'
+       *  "time" property doesn't end up in the config file one per
+       *  channel. See bug #700653.
+       */
+      success =
+        (gimp_config_serialize_property_by_name (config, "channel",     writer) &&
+         gimp_config_serialize_property_by_name (config, "gamma",       writer) &&
+         gimp_config_serialize_property_by_name (config, "low-input",   writer) &&
+         gimp_config_serialize_property_by_name (config, "high-input",  writer) &&
+         gimp_config_serialize_property_by_name (config, "low-output",  writer) &&
+         gimp_config_serialize_property_by_name (config, "high-output", writer));
 
       if (! success)
         break;
@@ -562,24 +573,35 @@ gimp_levels_config_adjust_by_colors (GimpLevelsConfig     *config,
 
       range = config->high_input[channel] - config->low_input[channel];
       if (range <= 0)
-        return;
+        goto out;
 
       input -= config->low_input[channel];
       if (input < 0)
-        return;
+        goto out;
 
       /* Normalize input and lightness */
       inten = input / range;
-      out_light = lightness/ range;
+      out_light = lightness / range;
 
-      if (out_light <= 0)
-        return;
+      /* See bug 622054: picking pure black or white as gamma doesn't
+       * work. But we cannot compare to 0.0 or 1.0 because cpus and
+       * compilers are shit. If you try to check out_light using
+       * printf() it will give exact 0.0 or 1.0 anyway, probably
+       * because the generated code is different and out_light doesn't
+       * live in a register. That must be why the cpu/compiler mafia
+       * invented epsilon and defined this shit to be the programmer's
+       * responsibility.
+       */
+      if (out_light <= 0.0001 || out_light >= 0.9999)
+        goto out;
 
       /* Map selected color to corresponding lightness */
       config->gamma[channel] = log (inten) / log (out_light);
+      config->gamma[channel] = CLAMP (config->gamma[channel], 0.1, 10.0);
       g_object_notify (G_OBJECT (config), "gamma");
     }
 
+ out:
   g_object_thaw_notify (G_OBJECT (config));
 }
 

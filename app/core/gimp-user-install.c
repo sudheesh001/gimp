@@ -110,30 +110,35 @@ gimp_user_install_items[] =
 };
 
 
-static gboolean  gimp_user_install_detect_old    (GimpUserInstall  *install,
-                                                  const gchar      *gimp_dir);
-static void      user_install_log                (GimpUserInstall  *install,
-                                                  const gchar      *format,
+static gboolean  user_install_detect_old         (GimpUserInstall    *install,
+                                                  const gchar        *gimp_dir);
+static gchar *   user_install_old_style_gimpdir  (void);
+
+static void      user_install_log                (GimpUserInstall    *install,
+                                                  const gchar        *format,
                                                   ...) G_GNUC_PRINTF (2, 3);
-static void      user_install_log_newline        (GimpUserInstall  *install);
-static void      user_install_log_error          (GimpUserInstall  *install,
-                                                  GError          **error);
+static void      user_install_log_newline        (GimpUserInstall    *install);
+static void      user_install_log_error          (GimpUserInstall    *install,
+                                                  GError            **error);
 
-static gboolean  user_install_mkdir              (GimpUserInstall  *install,
-                                                  const gchar      *dirname);
-static gboolean  user_install_mkdir_with_parents (GimpUserInstall  *install,
-                                                  const gchar      *dirname);
-static gboolean  user_install_file_copy          (GimpUserInstall  *install,
-                                                  const gchar      *source,
-                                                  const gchar      *dest);
-static gboolean  user_install_dir_copy           (GimpUserInstall  *install,
-                                                  const gchar      *source,
-                                                  const gchar      *base);
+static gboolean  user_install_mkdir              (GimpUserInstall    *install,
+                                                  const gchar        *dirname);
+static gboolean  user_install_mkdir_with_parents (GimpUserInstall    *install,
+                                                  const gchar        *dirname);
+static gboolean  user_install_file_copy          (GimpUserInstall    *install,
+                                                  const gchar        *source,
+                                                  const gchar        *dest,
+                                                  const gchar        *old_options_regexp,
+                                                  GRegexEvalCallback  update_callback);
+static gboolean  user_install_dir_copy           (GimpUserInstall    *install,
+                                                  const gchar        *source,
+                                                  const gchar        *base);
 
-static gboolean  user_install_create_files       (GimpUserInstall  *install);
-static gboolean  user_install_migrate_files      (GimpUserInstall  *install);
+static gboolean  user_install_create_files       (GimpUserInstall    *install);
+static gboolean  user_install_migrate_files      (GimpUserInstall    *install);
 
 
+/*  public functions  */
 
 GimpUserInstall *
 gimp_user_install_new (gboolean verbose)
@@ -142,20 +147,17 @@ gimp_user_install_new (gboolean verbose)
 
   install->verbose = verbose;
 
-  gimp_user_install_detect_old (install, gimp_directory ());
+  user_install_detect_old (install, gimp_directory ());
 
-#ifdef PLATFORM_OSX
   if (! install->old_dir)
     {
-      /*  if the default old gimpdir was not found, try the "classic" one
-       *  in the home folder
+      /* if the default XDG-style config directory was not found, try
+       * the "old-style" path in the home folder.
        */
-      gchar *dir = g_strdup_printf ("%s/.gimp-%s",
-                                    g_get_home_dir (), GIMP_APP_VERSION);
-      gimp_user_install_detect_old (install, dir);
+      gchar *dir = user_install_old_style_gimpdir ();
+      user_install_detect_old (install, dir);
       g_free (dir);
     }
-#endif
 
   return install;
 }
@@ -220,8 +222,8 @@ gimp_user_install_set_log_handler (GimpUserInstall        *install,
 /*  Local functions  */
 
 static gboolean
-gimp_user_install_detect_old (GimpUserInstall *install,
-                              const gchar     *gimp_dir)
+user_install_detect_old (GimpUserInstall *install,
+                         const gchar     *gimp_dir)
 {
   gchar    *dir     = g_strdup (gimp_dir);
   gchar    *version;
@@ -264,6 +266,52 @@ gimp_user_install_detect_old (GimpUserInstall *install,
     }
 
   return migrate;
+}
+
+static gchar *
+user_install_old_style_gimpdir (void)
+{
+  const gchar *home_dir = g_get_home_dir ();
+  gchar       *gimp_dir = NULL;
+
+  if (home_dir)
+    {
+      gimp_dir = g_build_filename (home_dir, ".gimp-" GIMP_APP_VERSION, NULL);
+    }
+  else
+    {
+      gchar *user_name = g_strdup (g_get_user_name ());
+      gchar *subdir_name;
+
+#ifdef G_OS_WIN32
+      gchar *p = user_name;
+
+      while (*p)
+        {
+          /* Replace funny characters in the user name with an
+           * underscore. The code below also replaces some
+           * characters that in fact are legal in file names, but
+           * who cares, as long as the definitely illegal ones are
+           * caught.
+           */
+          if (!g_ascii_isalnum (*p) && !strchr ("-.,@=", *p))
+            *p = '_';
+          p++;
+        }
+#endif
+
+#ifndef G_OS_WIN32
+      g_message ("warning: no home directory.");
+#endif
+      subdir_name = g_strconcat (".gimp-" GIMP_APP_VERSION ".", user_name, NULL);
+      gimp_dir = g_build_filename (gimp_data_directory (),
+                                   subdir_name,
+                                   NULL);
+      g_free (user_name);
+      g_free (subdir_name);
+    }
+
+  return gimp_dir;
 }
 
 static void
@@ -320,9 +368,11 @@ user_install_log_error (GimpUserInstall  *install,
 }
 
 static gboolean
-user_install_file_copy (GimpUserInstall *install,
-                        const gchar     *source,
-                        const gchar     *dest)
+user_install_file_copy (GimpUserInstall    *install,
+                        const gchar        *source,
+                        const gchar        *dest,
+                        const gchar        *old_options_regexp,
+                        GRegexEvalCallback  update_callback)
 {
   GError   *error = NULL;
   gboolean  success;
@@ -331,7 +381,7 @@ user_install_file_copy (GimpUserInstall *install,
                     gimp_filename_to_utf8 (dest),
                     gimp_filename_to_utf8 (source));
 
-  success = gimp_config_file_copy (source, dest, &error);
+  success = gimp_config_file_copy (source, dest, old_options_regexp, update_callback, &error);
 
   user_install_log_error (install, &error);
 
@@ -390,6 +440,38 @@ user_install_mkdir_with_parents (GimpUserInstall *install,
   return TRUE;
 }
 
+/* The regexp pattern of all options changed from previous menurc.
+ * Add any pattern that we want to recognize for replacement in the menurc of
+ * the next release*/
+#define MENURC_OVER20_UPDATE_PATTERN "NOMATCH^"
+
+/**
+ * callback to use for updating any change value in the menurc.
+ * data is unused (always NULL).
+ * The updated value will be matched line by line.
+ */
+static gboolean
+user_update_menurc_over20 (const GMatchInfo *matched_value,
+                           GString          *new_value,
+                           gpointer          data)
+{
+  gchar *match;
+  match = g_match_info_fetch (matched_value, 0);
+
+  /* This is an example of how to use it.
+   * If view-close were to be renamed to file-close for instance, we'd add:
+
+  if (strcmp (match, "\"<Actions>/view/view-close\"") == 0)
+    g_string_append (new_value, "\"<Actions>/file/file-close\"");
+  else
+  */
+  /* Should not happen. Just in case we match something unexpected by mistake. */
+  g_string_append (new_value, match);
+
+  g_free (match);
+  return FALSE;
+}
+
 static gboolean
 user_install_dir_copy (GimpUserInstall *install,
                        const gchar     *source,
@@ -431,7 +513,7 @@ user_install_dir_copy (GimpUserInstall *install,
           g_snprintf (dest, sizeof (dest), "%s%c%s",
                       dirname, G_DIR_SEPARATOR, basename);
 
-          if (! user_install_file_copy (install, name, dest))
+          if (! user_install_file_copy (install, name, dest, NULL, NULL))
             {
               g_free (name);
               goto error;
@@ -484,7 +566,7 @@ user_install_create_files (GimpUserInstall *install)
                       gimp_sysconf_directory (), G_DIR_SEPARATOR,
                       gimp_user_install_items[i].name);
 
-          if (! user_install_file_copy (install, source, dest))
+          if (! user_install_file_copy (install, source, dest, NULL, NULL))
             return FALSE;
           break;
         }
@@ -526,6 +608,8 @@ user_install_migrate_files (GimpUserInstall *install)
   while ((basename = g_dir_read_name (dir)) != NULL)
     {
       gchar *source = g_build_filename (install->old_dir, basename, NULL);
+      const gchar* update_pattern = NULL;
+      GRegexEvalCallback update_callback = NULL;
 
       if (g_file_test (source, G_FILE_TEST_IS_REGULAR))
         {
@@ -539,16 +623,19 @@ user_install_migrate_files (GimpUserInstall *install)
               goto next_file;
             }
 
-          /*  skip menurc for gimp 2.0 as the format has changed  */
-          if (install->old_minor == 0 && strcmp (basename, "menurc") == 0)
+          if (strcmp (basename, "menurc") == 0)
             {
-              goto next_file;
+              /*  skip menurc for gimp 2.0 as the format has changed  */
+              if (install->old_minor == 0)
+                goto next_file;
+              update_pattern = MENURC_OVER20_UPDATE_PATTERN;
+              update_callback = user_update_menurc_over20;
             }
 
           g_snprintf (dest, sizeof (dest), "%s%c%s",
                       gimp_directory (), G_DIR_SEPARATOR, basename);
 
-          user_install_file_copy (install, source, dest);
+          user_install_file_copy (install, source, dest, update_pattern, update_callback);
         }
       else if (g_file_test (source, G_FILE_TEST_IS_DIR))
         {
@@ -566,7 +653,7 @@ user_install_migrate_files (GimpUserInstall *install)
       g_free (source);
     }
 
-  /*  create the tmp directory that was explicitely not copied  */
+  /*  create the tmp directory that was explicitly not copied  */
 
   g_snprintf (dest, sizeof (dest), "%s%c%s",
               gimp_directory (), G_DIR_SEPARATOR, "tmp");

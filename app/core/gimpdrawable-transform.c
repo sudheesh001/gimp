@@ -30,11 +30,10 @@
 
 #include "core-types.h"
 
-#include "gegl/gimp-gegl-nodes.h"
+#include "gegl/gimp-gegl-apply-operation.h"
 #include "gegl/gimp-gegl-utils.h"
 
 #include "gimp.h"
-#include "gimp-apply-operation.h"
 #include "gimp-transform-resize.h"
 #include "gimpchannel.h"
 #include "gimpcontext.h"
@@ -73,7 +72,6 @@ gimp_drawable_transform_buffer_affine (GimpDrawable           *drawable,
                                        const GimpMatrix3      *matrix,
                                        GimpTransformDirection  direction,
                                        GimpInterpolationType   interpolation_type,
-                                       gint                    recursion_level,
                                        GimpTransformResize     clip_result,
                                        gint                   *new_offset_x,
                                        gint                   *new_offset_y,
@@ -81,10 +79,8 @@ gimp_drawable_transform_buffer_affine (GimpDrawable           *drawable,
 {
   GeglBuffer  *new_buffer;
   GimpMatrix3  m;
-  GimpMatrix3  inv;
   gint         u1, v1, u2, v2;  /* source bounding box */
   gint         x1, y1, x2, y2;  /* target bounding box */
-  GeglNode    *affine;
   GimpMatrix3  gegl_matrix;
 
   g_return_val_if_fail (GIMP_IS_DRAWABLE (drawable), NULL);
@@ -96,17 +92,9 @@ gimp_drawable_transform_buffer_affine (GimpDrawable           *drawable,
   g_return_val_if_fail (new_offset_y != NULL, NULL);
   g_return_val_if_fail (progress == NULL || GIMP_IS_PROGRESS (progress), NULL);
 
-  m   = *matrix;
-  inv = *matrix;
+  m = *matrix;
 
   if (direction == GIMP_TRANSFORM_BACKWARD)
-    {
-      /*  keep the original matrix here, so we dont need to recalculate
-       *  the inverse later
-       */
-      gimp_matrix3_invert (&inv);
-    }
-  else
     {
       /*  Find the inverse of the transformation matrix  */
       gimp_matrix3_invert (&m);
@@ -123,32 +111,23 @@ gimp_drawable_transform_buffer_affine (GimpDrawable           *drawable,
     clip_result = GIMP_TRANSFORM_RESIZE_CLIP;
 
   /*  Find the bounding coordinates of target */
-  gimp_transform_resize_boundary (&inv, clip_result,
+  gimp_transform_resize_boundary (&m, clip_result,
                                   u1, v1, u2, v2,
                                   &x1, &y1, &x2, &y2);
 
   /*  Get the new temporary buffer for the transformed result  */
-  new_buffer = gimp_gegl_buffer_new (GEGL_RECTANGLE (0, 0, x2 - x1, y2 - y1),
-                                     gegl_buffer_get_format (orig_buffer));
+  new_buffer = gegl_buffer_new (GEGL_RECTANGLE (0, 0, x2 - x1, y2 - y1),
+                                gegl_buffer_get_format (orig_buffer));
 
   gimp_matrix3_identity (&gegl_matrix);
   gimp_matrix3_translate (&gegl_matrix, u1, v1);
-  gimp_matrix3_mult (&inv, &gegl_matrix);
+  gimp_matrix3_mult (&m, &gegl_matrix);
   gimp_matrix3_translate (&gegl_matrix, -x1, -y1);
 
-  affine = gegl_node_new_child (NULL,
-                                "operation",  "gegl:transform",
-                                "filter",     gimp_interpolation_to_gegl_filter (interpolation_type),
-                                "hard-edges", TRUE,
-                                NULL);
-
-  gimp_gegl_node_set_matrix (affine, &gegl_matrix);
-
-  gimp_apply_operation (orig_buffer, progress, NULL,
-                        affine,
-                        new_buffer, NULL);
-
-  g_object_unref (affine);
+  gimp_gegl_apply_transform (orig_buffer, progress, NULL,
+                             new_buffer,
+                             interpolation_type,
+                             &gegl_matrix);
 
   *new_offset_x = x1;
   *new_offset_y = y1;
@@ -209,9 +188,9 @@ gimp_drawable_transform_buffer_flip (GimpDrawable        *drawable,
       break;
     }
 
-  new_buffer = gimp_gegl_buffer_new (GEGL_RECTANGLE (0, 0,
-                                                     new_width, new_height),
-                                     gegl_buffer_get_format (orig_buffer));
+  new_buffer = gegl_buffer_new (GEGL_RECTANGLE (0, 0,
+                                                new_width, new_height),
+                                gegl_buffer_get_format (orig_buffer));
 
   if (clip_result && (new_x != orig_x || new_y != orig_y))
     {
@@ -420,9 +399,9 @@ gimp_drawable_transform_buffer_rotate (GimpDrawable     *drawable,
       gint       clip_x, clip_y;
       gint       clip_width, clip_height;
 
-      new_buffer = gimp_gegl_buffer_new (GEGL_RECTANGLE (0, 0,
-                                                         orig_width, orig_height),
-                                         gegl_buffer_get_format (orig_buffer));
+      new_buffer = gegl_buffer_new (GEGL_RECTANGLE (0, 0,
+                                                    orig_width, orig_height),
+                                    gegl_buffer_get_format (orig_buffer));
 
       *new_offset_x = orig_x;
       *new_offset_y = orig_y;
@@ -497,9 +476,9 @@ gimp_drawable_transform_buffer_rotate (GimpDrawable     *drawable,
     }
   else
     {
-      new_buffer = gimp_gegl_buffer_new (GEGL_RECTANGLE (0, 0,
-                                                         new_width, new_height),
-                                         gegl_buffer_get_format (orig_buffer));
+      new_buffer = gegl_buffer_new (GEGL_RECTANGLE (0, 0,
+                                                    new_width, new_height),
+                                    gegl_buffer_get_format (orig_buffer));
 
       *new_offset_x = new_x;
       *new_offset_y = new_y;
@@ -633,7 +612,6 @@ gimp_drawable_transform_affine (GimpDrawable           *drawable,
                                 const GimpMatrix3      *matrix,
                                 GimpTransformDirection  direction,
                                 GimpInterpolationType   interpolation_type,
-                                gint                    recursion_level,
                                 GimpTransformResize     clip_result,
                                 GimpProgress           *progress)
 {
@@ -684,7 +662,6 @@ gimp_drawable_transform_affine (GimpDrawable           *drawable,
                                matrix,
                                direction,
                                interpolation_type,
-                               recursion_level,
                                clip_result,
                                progress);
         }
@@ -697,7 +674,6 @@ gimp_drawable_transform_affine (GimpDrawable           *drawable,
                                                           matrix,
                                                           direction,
                                                           interpolation_type,
-                                                          recursion_level,
                                                           clip_result,
                                                           &new_offset_x,
                                                           &new_offset_y,

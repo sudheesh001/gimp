@@ -127,6 +127,12 @@ file_save (Gimp                *gimp,
               goto out;
             }
         }
+
+      if (file_proc->handles_uri)
+        {
+          g_free (filename);
+          filename = g_strdup (uri);
+        }
     }
   else
     {
@@ -180,10 +186,12 @@ file_save (Gimp                *gimp,
            * the export state to clean
            */
           gimp_image_export_clean_all (image);
+
+          gimp_object_name_changed (GIMP_OBJECT (image));
         }
       else if (export_forward)
         {
-          /* Remeber the last entered Export URI for the image. We
+          /* Remember the last entered Export URI for the image. We
            * only need to do this explicitly when exporting. It
            * happens implicitly when saving since the GimpObject name
            * of a GimpImage is the last-save URI
@@ -211,7 +219,8 @@ file_save (Gimp                *gimp,
 
       /* only save a thumbnail if we are saving as XCF, see bug #25272 */
       if (GIMP_PROCEDURE (file_proc)->proc_type == GIMP_INTERNAL)
-        gimp_imagefile_save_thumbnail (imagefile, file_proc->mime_type, image);
+        gimp_imagefile_save_thumbnail (imagefile, file_proc->mime_type, image,
+                                       NULL);
     }
   else if (status != GIMP_PDB_CANCEL)
     {

@@ -109,7 +109,7 @@ string_to_unit (const GValue *src_value,
   return;
 
  error:
-  g_warning ("Can't convert string to GimpUnit.");
+  g_warning ("Can't convert string '%s' to GimpUnit.", str);
 }
 
 
@@ -344,6 +344,12 @@ gimp_unit_get_plural (GimpUnit unit)
 
   return _gimp_unit_vtable.unit_get_plural (unit);
 }
+
+static gint print (gchar       *buf,
+                   gint         len,
+                   gint         start,
+                   const gchar *fmt,
+                   ...) G_GNUC_PRINTF (4, 5);
 
 static gint
 print (gchar       *buf,

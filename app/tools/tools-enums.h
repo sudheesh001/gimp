@@ -131,6 +131,45 @@ typedef enum
 } GimpToolAction;
 
 
+#define GIMP_TYPE_MATTING_DRAW_MODE (gimp_matting_draw_mode_get_type ())
+
+GType gimp_matting_draw_mode_get_type (void) G_GNUC_CONST;
+
+typedef enum
+{
+ GIMP_MATTING_DRAW_MODE_FOREGROUND,   /*< desc="Draw foreground" >*/
+ GIMP_MATTING_DRAW_MODE_BACKGROUND,   /*< desc="Draw background" >*/
+ GIMP_MATTING_DRAW_MODE_UNKNOWN,      /*< desc="Draw unknown" >*/
+} GimpMattingDrawMode;
+
+
+#define GIMP_TYPE_MATTING_ENGINE (gimp_matting_engine_get_type ())
+
+GType gimp_matting_engine_get_type (void) G_GNUC_CONST;
+
+typedef enum
+{
+ GIMP_MATTING_ENGINE_GLOBAL,  /*< desc="Matting Global" >*/
+ GIMP_MATTING_ENGINE_LEVIN,   /*< desc="Matting Levin" >*/
+} GimpMattingEngine;
+
+
+#define GIMP_TYPE_WARP_BEHAVIOR (gimp_warp_behavior_get_type ())
+
+GType gimp_warp_behavior_get_type (void) G_GNUC_CONST;
+
+typedef enum
+{
+  GIMP_WARP_BEHAVIOR_MOVE,      /*< desc="Move pixels" >*/
+  GEGL_WARP_BEHAVIOR_GROW,      /*< desc="Grow area" >*/
+  GEGL_WARP_BEHAVIOR_SHRINK,    /*< desc="Shrink area" >*/
+  GEGL_WARP_BEHAVIOR_SWIRL_CW,  /*< desc="Swirl clockwise" >*/
+  GEGL_WARP_BEHAVIOR_SWIRL_CCW, /*< desc="Swirl counter-clockwise" >*/
+  GEGL_WARP_BEHAVIOR_ERASE,     /*< desc="Erase warping" >*/
+  GEGL_WARP_BEHAVIOR_SMOOTH     /*< desc="Smooth warping" >*/
+} GimpWarpBehavior;
+
+
 /*
  * non-registered enums; register them if needed
  */

@@ -28,7 +28,7 @@ file_sgi_SOURCES = \
 	sgi-lib.c	\
 	sgi-lib.h
 
-INCLUDES = \
+AM_CPPFLAGS = \
 	-I$(top_srcdir)	\
 	$(GTK_CFLAGS)	\
 	$(GEGL_CFLAGS) \
@@ -43,6 +43,7 @@ LDADD = \
 	$(libgimpcolor)		\
 	$(libgimpbase)		\
 	$(GTK_LIBS)		\
+	$(GEGL_LIBS)		\
 	$(RT_LIBS)		\
 	$(INTLLIBS)		\
 	$(file_sgi_RC)

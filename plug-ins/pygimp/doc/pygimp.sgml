@@ -380,7 +380,7 @@ pdb.query(name, [blurb, [help, [author, [copyright, [date, [type]]]]]])
 	<VarListEntry>
 	  <term>proc_blurb</term>
 	  <ListItem>
-	    <Para>A short peice of information about the procedure.</Para>
+	    <Para>A short piece of information about the procedure.</Para>
 	  </ListItem>
 	</VarListEntry>
 	<VarListEntry>
@@ -851,7 +851,7 @@ pdb.query(name, [blurb, [help, [author, [copyright, [date, [type]]]]]])
 	<VarListEntry>
 	  <Term><function>gimp.quit</function>()</Term>
 	  <ListItem>
-	    <Para>Stops execution imediately and exits.</Para>
+	    <Para>Stops execution immediately and exits.</Para>
 	  </listitem>
 	</VarListEntry>
 	<VarListEntry>
@@ -2138,7 +2138,7 @@ main()
 	    style (here, <Literal>console_echo</Literal> becomes
 	    <Literal>console-echo</Literal>). Moreover, a
 	    <Literal>python-fu-</Literal> prefix is automatically added; it is
-	    better not to explicitely add it ourselves, as it will makes the
+	    better not to explicitly add it ourselves, as it will make the
 	    often useful <Literal>(plug-in-script-fu-eval ...)</Literal>
 	    evaluation fail.</Para>
 	  </ListItem>

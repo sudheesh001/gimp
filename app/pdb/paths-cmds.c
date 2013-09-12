@@ -334,7 +334,8 @@ path_stroke_current_invoker (GimpProcedure         *procedure,
       GimpDrawable *drawable = gimp_image_get_active_drawable (image);
 
       if (vectors && drawable &&
-          gimp_pdb_item_is_writable (GIMP_ITEM (drawable), error) &&
+          gimp_pdb_item_is_modifyable (GIMP_ITEM (drawable),
+                                       GIMP_PDB_ITEM_CONTENT, error) &&
           gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
         {
           GimpStrokeOptions *options = gimp_stroke_options_new (gimp, context, TRUE);
@@ -719,7 +720,7 @@ register_paths_procs (GimpPDB *pdb)
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_string_array ("path-list",
                                                                  "path list",
-                                                                 "List of the paths belonging to this image.",
+                                                                 "List of the paths belonging to this image",
                                                                  GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -862,7 +863,7 @@ register_paths_procs (GimpPDB *pdb)
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_float_array ("points-pairs",
                                                                 "points pairs",
-                                                                "The points in the path represented as 3 floats. The first is the x pos, next is the y pos, last is the type of the pnt. The type field is dependant on the path type. For beziers (type 1 paths) the type can either be (1.0 = BEZIER_ANCHOR, 2.0 = BEZIER_CONTROL, 3.0 = BEZIER_MOVE). Note all points are returned in pixel resolution.",
+                                                                "The points in the path represented as 3 floats. The first is the x pos, next is the y pos, last is the type of the pnt. The type field is dependent on the path type. For beziers (type 1 paths) the type can either be (1.0 = BEZIER_ANCHOR, 2.0 = BEZIER_CONTROL, 3.0 = BEZIER_MOVE). Note all points are returned in pixel resolution.",
                                                                 GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -909,7 +910,7 @@ register_paths_procs (GimpPDB *pdb)
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_float_array ("points-pairs",
                                                             "points pairs",
-                                                            "The points in the path represented as 3 floats. The first is the x pos, next is the y pos, last is the type of the pnt. The type field is dependant on the path type. For beziers (type 1 paths) the type can either be (1.0 = BEZIER_ANCHOR, 2.0 = BEZIER_CONTROL, 3.0= BEZIER_MOVE). Note all points are returned in pixel resolution.",
+                                                            "The points in the path represented as 3 floats. The first is the x pos, next is the y pos, last is the type of the pnt. The type field is dependent on the path type. For beziers (type 1 paths) the type can either be (1.0 = BEZIER_ANCHOR, 2.0 = BEZIER_CONTROL, 3.0= BEZIER_MOVE). Note all points are returned in pixel resolution.",
                                                             GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);

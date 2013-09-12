@@ -54,6 +54,20 @@ typedef enum /*< pdb-skip >*/
 } GimpComponentMask;
 
 
+#define GIMP_TYPE_COMPONENT_TYPE (gimp_component_type_get_type ())
+
+GType gimp_component_type_get_type (void) G_GNUC_CONST;
+
+typedef enum
+{
+  GIMP_COMPONENT_TYPE_U8    = 100, /*< desc="8-bit integer"         >*/
+  GIMP_COMPONENT_TYPE_U16   = 200, /*< desc="16-bit integer"        >*/
+  GIMP_COMPONENT_TYPE_U32   = 300, /*< desc="32-bit integer"        >*/
+  GIMP_COMPONENT_TYPE_HALF  = 400, /*< desc="16-bit floating point" >*/
+  GIMP_COMPONENT_TYPE_FLOAT = 500  /*< desc="32-bit floating point" >*/
+} GimpComponentType;
+
+
 #define GIMP_TYPE_CONTAINER_POLICY (gimp_container_policy_get_type ())
 
 GType gimp_container_policy_get_type (void) G_GNUC_CONST;
@@ -348,11 +362,16 @@ GType gimp_precision_get_type (void) G_GNUC_CONST;
 
 typedef enum
 {
-  GIMP_PRECISION_U8,    /*< desc="8-bit integer"         >*/
-  GIMP_PRECISION_U16,   /*< desc="16-bit integer"        >*/
-  GIMP_PRECISION_U32,   /*< desc="32-bit integer"        >*/
-  GIMP_PRECISION_HALF,  /*< desc="16-bit floating point" >*/
-  GIMP_PRECISION_FLOAT  /*< desc="32-bit floating point" >*/
+  GIMP_PRECISION_U8_LINEAR    = 100, /*< desc="8-bit linear integer"         >*/
+  GIMP_PRECISION_U8_GAMMA     = 150, /*< desc="8-bit gamma integer"          >*/
+  GIMP_PRECISION_U16_LINEAR   = 200, /*< desc="16-bit linear integer"        >*/
+  GIMP_PRECISION_U16_GAMMA    = 250, /*< desc="16-bit gamma integer"         >*/
+  GIMP_PRECISION_U32_LINEAR   = 300, /*< desc="32-bit linear integer"        >*/
+  GIMP_PRECISION_U32_GAMMA    = 350, /*< desc="32-bit gamma integer"         >*/
+  GIMP_PRECISION_HALF_LINEAR  = 400, /*< desc="16-bit linear floating point" >*/
+  GIMP_PRECISION_HALF_GAMMA   = 450, /*< desc="16-bit gamma floating point"  >*/
+  GIMP_PRECISION_FLOAT_LINEAR = 500, /*< desc="32-bit linear floating point" >*/
+  GIMP_PRECISION_FLOAT_GAMMA  = 550  /*< desc="32-bit gamma floating point"  >*/
 } GimpPrecision;
 
 
@@ -522,6 +541,8 @@ typedef enum /*< pdb-skip >*/
   GIMP_UNDO_ITEM_DISPLACE,            /*< desc="Move item"                   >*/
   GIMP_UNDO_ITEM_VISIBILITY,          /*< desc="Item visibility"             >*/
   GIMP_UNDO_ITEM_LINKED,              /*< desc="Link/Unlink item"            >*/
+  GIMP_UNDO_ITEM_LOCK_CONTENT,        /*< desc="Lock/Unlock content"         >*/
+  GIMP_UNDO_ITEM_LOCK_POSITION,       /*< desc="Lock/Unlock position"        >*/
   GIMP_UNDO_LAYER_ADD,                /*< desc="New layer"                   >*/
   GIMP_UNDO_LAYER_REMOVE,             /*< desc="Delete layer"                >*/
   GIMP_UNDO_LAYER_MODE,               /*< desc="Set layer mode"              >*/
@@ -532,6 +553,7 @@ typedef enum /*< pdb-skip >*/
   GIMP_UNDO_GROUP_LAYER_CONVERT,      /*< desc="Convert group layer"         >*/
   GIMP_UNDO_TEXT_LAYER,               /*< desc="Text layer"                  >*/
   GIMP_UNDO_TEXT_LAYER_MODIFIED,      /*< desc="Text layer modification"     >*/
+  GIMP_UNDO_TEXT_LAYER_CONVERT,       /*< desc="Convert text layer"          >*/
   GIMP_UNDO_LAYER_MASK_ADD,           /*< desc="Add layer mask"              >*/
   GIMP_UNDO_LAYER_MASK_REMOVE,        /*< desc="Delete layer mask"           >*/
   GIMP_UNDO_LAYER_MASK_APPLY,         /*< desc="Apply layer mask"            >*/
@@ -571,6 +593,7 @@ typedef enum  /*< pdb-skip >*/
   GIMP_DIRTY_DRAWABLE        = 1 << 6,
   GIMP_DIRTY_VECTORS         = 1 << 7,
   GIMP_DIRTY_SELECTION       = 1 << 8,
+  GIMP_DIRTY_ACTIVE_DRAWABLE = 1 << 9,
 
   GIMP_DIRTY_ALL             = 0xffff
 } GimpDirtyMask;

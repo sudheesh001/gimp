@@ -103,8 +103,7 @@ gimp_text_buffer_constructed (GObject *object)
 {
   GimpTextBuffer *buffer = GIMP_TEXT_BUFFER (object);
 
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   gtk_text_buffer_set_text (GTK_TEXT_BUFFER (buffer), "", -1);
 
@@ -357,7 +356,7 @@ gimp_text_buffer_get_iter_size (GimpTextBuffer    *buffer,
   return NULL;
 }
 
-static GtkTextTag *
+GtkTextTag *
 gimp_text_buffer_get_size_tag (GimpTextBuffer *buffer,
                                gint            size)
 {
@@ -837,7 +836,7 @@ gimp_text_buffer_get_iter_font (GimpTextBuffer     *buffer,
   return NULL;
 }
 
-static GtkTextTag *
+GtkTextTag *
 gimp_text_buffer_get_font_tag (GimpTextBuffer *buffer,
                                const gchar    *font)
 {
@@ -931,7 +930,7 @@ gimp_text_buffer_get_iter_color (GimpTextBuffer    *buffer,
   return NULL;
 }
 
-static GtkTextTag *
+GtkTextTag *
 gimp_text_buffer_get_color_tag (GimpTextBuffer *buffer,
                                 const GimpRGB  *color)
 {

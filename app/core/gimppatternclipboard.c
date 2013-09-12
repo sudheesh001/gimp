@@ -99,8 +99,7 @@ gimp_pattern_clipboard_constructed (GObject *object)
 {
   GimpPatternClipboard *pattern = GIMP_PATTERN_CLIPBOARD (object);
 
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   g_assert (GIMP_IS_GIMP (pattern->gimp));
 
@@ -189,8 +188,8 @@ gimp_pattern_clipboard_buffer_changed (Gimp        *gimp,
       gint        width;
       gint        height;
 
-      width  = MIN (gimp_buffer_get_width  (buffer), 512);
-      height = MIN (gimp_buffer_get_height (buffer), 512);
+      width  = MIN (gimp_buffer_get_width  (buffer), 1024);
+      height = MIN (gimp_buffer_get_height (buffer), 1024);
 
       pattern->mask = gimp_temp_buf_new (width, height,
                                          gimp_buffer_get_format (buffer));

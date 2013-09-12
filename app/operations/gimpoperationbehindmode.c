@@ -75,71 +75,54 @@ gimp_operation_behind_mode_process (GeglOperation       *operation,
                                     const GeglRectangle *roi,
                                     gint                 level)
 {
-  GimpOperationPointLayerMode *point    = GIMP_OPERATION_POINT_LAYER_MODE (operation);
-  gdouble                      opacity  = point->opacity;
-  gfloat                      *in       = in_buf;
-  gfloat                      *layer    = aux_buf;
-  gfloat                      *mask     = aux2_buf;
-  gfloat                      *out      = out_buf;
-  const gboolean               has_mask = mask != NULL;
+  gfloat opacity = GIMP_OPERATION_POINT_LAYER_MODE (operation)->opacity;
 
-  if (point->premultiplied)
+  return gimp_operation_behind_mode_process_pixels (in_buf, aux_buf, aux2_buf, out_buf, opacity, samples, roi, level);
+}
+
+gboolean
+gimp_operation_behind_mode_process_pixels (gfloat              *in,
+                                           gfloat              *layer,
+                                           gfloat              *mask,
+                                           gfloat              *out,
+                                           gfloat               opacity,
+                                           glong                samples,
+                                           const GeglRectangle *roi,
+                                           gint                 level)
+{
+  const gboolean has_mask = mask != NULL;
+
+  while (samples--)
     {
-      while (samples--)
+      gfloat value = opacity;
+      gint   b;
+
+      if (has_mask)
+        value *= *mask;
+
+      out[ALPHA] = in[ALPHA] + (1.0 - in[ALPHA]) * layer[ALPHA] * value;
+
+      if (out[ALPHA])
         {
-          gint    b;
-          gdouble value = opacity;
-
-          if (has_mask)
-            value *= *mask;
-
+          for (b = RED; b < ALPHA; b++)
+            {
+              out[b] = (in[b] * in[ALPHA] + layer[b] * value * layer[ALPHA] * value * (1.0 - in[ALPHA])) / out[ALPHA];
+            }
+        }
+      else
+        {
           for (b = RED; b <= ALPHA; b++)
             {
-              out[b] = in[b] + layer[b] * value * (1.0 - in[ALPHA]);
+              out[b] = in[b];
             }
-
-          in    += 4;
-          layer += 4;
-          out   += 4;
-
-          if (has_mask)
-            mask++;
         }
-    }
-  else
-    {
-      while (samples--)
-        {
-          gint    b;
-          gdouble value = opacity;
 
-          if (has_mask)
-            value *= *mask;
+      in    += 4;
+      layer += 4;
+      out   += 4;
 
-          out[ALPHA] = in[ALPHA] + (1.0 - in[ALPHA]) * layer[ALPHA] * value;
-
-          if (out[ALPHA])
-            {
-              for (b = RED; b < ALPHA; b++)
-                {
-                  out[b] = (in[b] * in[ALPHA] + layer[b] * value * layer[ALPHA] * value * (1.0 - in[ALPHA])) / out[ALPHA];
-                }
-            }
-          else
-            {
-              for (b = RED; b <= ALPHA; b++)
-                {
-                  out[b] = in[b];
-                }
-            }
-
-          in    += 4;
-          layer += 4;
-          out   += 4;
-
-          if (has_mask)
-            mask++;
-        }
+      if (has_mask)
+        mask++;
     }
 
   return TRUE;

@@ -92,7 +92,6 @@ gimp_display_shell_set_override_cursor (GimpDisplayShell *shell,
       shell->using_override_cursor = TRUE;
 
       gimp_cursor_set (shell->canvas,
-                       shell->cursor_format,
                        shell->cursor_handedness,
                        cursor_type,
                        GIMP_TOOL_CURSOR_NONE,
@@ -221,8 +220,7 @@ gimp_display_shell_real_set_cursor (GimpDisplayShell   *shell,
                                     GimpCursorModifier  modifier,
                                     gboolean            always_install)
 {
-  GimpCursorFormat cursor_format;
-  GimpHandedness   cursor_handedness;
+  GimpHandedness cursor_handedness;
 
   g_return_if_fail (GIMP_IS_DISPLAY_SHELL (shell));
 
@@ -245,8 +243,8 @@ gimp_display_shell_real_set_cursor (GimpDisplayShell   *shell,
           break;
 
         case GIMP_CURSOR_MODE_TOOL_CROSSHAIR:
-          if (cursor_type < GIMP_CURSOR_CORNER_TOP_LEFT ||
-              cursor_type > GIMP_CURSOR_SIDE_BOTTOM)
+          if (cursor_type < GIMP_CURSOR_CORNER_TOP ||
+              cursor_type > GIMP_CURSOR_SIDE_TOP_LEFT)
             {
               /* the corner and side cursors count as crosshair, so leave
                * them and override everything else
@@ -268,24 +266,23 @@ gimp_display_shell_real_set_cursor (GimpDisplayShell   *shell,
         }
     }
 
-  cursor_format     = GIMP_GUI_CONFIG (shell->display->config)->cursor_format;
+  cursor_type = gimp_cursor_rotate (cursor_type, shell->rotate_angle);
+
   cursor_handedness = GIMP_GUI_CONFIG (shell->display->config)->cursor_handedness;
 
-  if (shell->cursor_format     != cursor_format     ||
-      shell->cursor_handedness != cursor_handedness ||
+  if (shell->cursor_handedness != cursor_handedness ||
       shell->current_cursor    != cursor_type       ||
       shell->tool_cursor       != tool_cursor       ||
       shell->cursor_modifier   != modifier          ||
       always_install)
     {
-      shell->cursor_format     = cursor_format;
       shell->cursor_handedness = cursor_handedness;
       shell->current_cursor    = cursor_type;
       shell->tool_cursor       = tool_cursor;
       shell->cursor_modifier   = modifier;
 
       gimp_cursor_set (shell->canvas,
-                       cursor_format, cursor_handedness,
+                       cursor_handedness,
                        cursor_type, tool_cursor, modifier);
     }
 }

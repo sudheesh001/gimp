@@ -88,17 +88,27 @@ gimp_operation_anti_erase_mode_process (GeglOperation       *operation,
                                         const GeglRectangle *roi,
                                         gint                 level)
 {
-  gdouble         opacity  = GIMP_OPERATION_POINT_LAYER_MODE (operation)->opacity;
-  gfloat         *in       = in_buf;
-  gfloat         *layer    = aux_buf;
-  gfloat         *mask     = aux2_buf;
-  gfloat         *out      = out_buf;
-  const gboolean  has_mask = mask != NULL;
+  gfloat opacity = GIMP_OPERATION_POINT_LAYER_MODE (operation)->opacity;
+
+  return gimp_operation_anti_erase_mode_process_pixels (in_buf, aux_buf, aux2_buf, out_buf, opacity, samples, roi, level);
+}
+
+gboolean
+gimp_operation_anti_erase_mode_process_pixels (gfloat              *in,
+                                               gfloat              *layer,
+                                               gfloat              *mask,
+                                               gfloat              *out,
+                                               gfloat               opacity,
+                                               glong                samples,
+                                               const GeglRectangle *roi,
+                                               gint                 level)
+{
+  const gboolean has_mask = mask != NULL;
 
   while (samples--)
     {
-      gdouble value = opacity;
-      gint    b;
+      gfloat value = opacity;
+      gint   b;
 
       if (has_mask)
         value *= *mask;

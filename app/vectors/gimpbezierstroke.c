@@ -555,7 +555,7 @@ gimp_bezier_stroke_nearest_point_get (const GimpStroke     *stroke,
                                       gdouble              *ret_pos)
 {
   gdouble     min_dist, dist, pos;
-  GimpCoords  point;
+  GimpCoords  point = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
   GimpCoords  segmentcoords[4];
   GList      *anchorlist;
   GimpAnchor *segment_start;
@@ -568,9 +568,10 @@ gimp_bezier_stroke_nearest_point_get (const GimpStroke     *stroke,
 
   count = 0;
   min_dist = -1;
+  pos = 0;
 
   for (anchorlist = stroke->anchors;
-       anchorlist && GIMP_ANCHOR (anchorlist->data)->type != GIMP_ANCHOR_ANCHOR;
+       GIMP_ANCHOR (anchorlist->data)->type != GIMP_ANCHOR_ANCHOR;
        anchorlist = g_list_next (anchorlist));
 
   segment_start = anchorlist->data;
@@ -806,7 +807,7 @@ gimp_bezier_stroke_nearest_tangent_get (const GimpStroke  *stroke,
   min_dist = -1;
 
   for (anchorlist = stroke->anchors;
-       anchorlist && GIMP_ANCHOR (anchorlist->data)->type != GIMP_ANCHOR_ANCHOR;
+       GIMP_ANCHOR (anchorlist->data)->type != GIMP_ANCHOR_ANCHOR;
        anchorlist = g_list_next (anchorlist));
 
   segment_start = anchorlist->data;
@@ -936,13 +937,6 @@ gimp_bezier_stroke_segment_nearest_tangent_get (const GimpCoords *beziercoords,
 
       if (ori * ori2 <= 0)
         {
-#if 0
-          if (ori2 == 0)
-            /* Kandidat finden */;
-          else
-            /* ret_coords[i] ist der Kandidat */;
-#endif
-
           gimp_coords_difference (&g_array_index (ret_coords, GimpCoords, i),
                                   coord1,
                                   &dcoord);
@@ -1017,7 +1011,7 @@ gimp_bezier_stroke_is_extendable (GimpStroke *stroke,
       else
         {
           /*
-           * it isnt. if we are on a handle go to the nearest
+           * It isn't. If we are on a handle go to the nearest
            * anchor and see if we can find an end from it.
            * Yes, this is tedious.
            */
@@ -1130,7 +1124,7 @@ gimp_bezier_stroke_extend (GimpStroke           *stroke,
           else
             {
               /*
-               * it isnt. if we are on a handle go to the nearest
+               * It isn't. If we are on a handle go to the nearest
                * anchor and see if we can find an end from it.
                * Yes, this is tedious.
                */

@@ -42,6 +42,7 @@
 
 
 #define GIMP_MAX_NUM_THREADS 16
+#define GIMP_MAX_MEM_PROCESS (MIN (G_MAXSIZE, GIMP_MAX_MEMSIZE))
 
 enum
 {
@@ -50,6 +51,7 @@ enum
   PROP_SWAP_PATH,
   PROP_NUM_PROCESSORS,
   PROP_TILE_CACHE_SIZE,
+  PROP_USE_OPENCL,
 
   /* ignored, only for backward compatibility: */
   PROP_STINGY_MEMORY_USE
@@ -127,7 +129,7 @@ gimp_gegl_config_class_init (GimpGeglConfigClass *klass)
                                  GIMP_PARAM_STATIC_STRINGS |
                                  GIMP_CONFIG_PARAM_RESTART);
 
-  num_processors = gimp_get_number_of_processors ();
+  num_processors = g_get_num_processors ();
 
 #ifdef GIMP_UNSTABLE
   num_processors = num_processors * 2;
@@ -142,26 +144,25 @@ gimp_gegl_config_class_init (GimpGeglConfigClass *klass)
 
   memory_size = gimp_get_physical_memory_size ();
 
+  /* limit to the amount one process can handle */
+  memory_size = MIN (GIMP_MAX_MEM_PROCESS, memory_size);
+
   if (memory_size > 0)
     memory_size = memory_size / 2; /* half the memory */
   else
     memory_size = 1 << 30; /* 1GB */
 
-#ifdef __GNUC__
-#warning limiting tile cache size to G_MAXINT
-#endif
-  memory_size = MIN (memory_size, G_MAXINT);
-
   GIMP_CONFIG_INSTALL_PROP_MEMSIZE (object_class, PROP_TILE_CACHE_SIZE,
                                     "tile-cache-size", TILE_CACHE_SIZE_BLURB,
-#if 0
-                                    0, MIN (G_MAXSIZE, GIMP_MAX_MEMSIZE),
-#else
-                                    0, MIN (G_MAXINT, GIMP_MAX_MEMSIZE),
-#endif
+                                    0, GIMP_MAX_MEM_PROCESS,
                                     memory_size,
                                     GIMP_PARAM_STATIC_STRINGS |
                                     GIMP_CONFIG_PARAM_CONFIRM);
+
+  GIMP_CONFIG_INSTALL_PROP_BOOLEAN (object_class, PROP_USE_OPENCL,
+                                    "use-opencl", USE_OPENCL_BLURB,
+                                    TRUE,
+                                    GIMP_PARAM_STATIC_STRINGS);
 
   /*  only for backward compatibility:  */
   GIMP_CONFIG_INSTALL_PROP_BOOLEAN (object_class, PROP_STINGY_MEMORY_USE,
@@ -214,6 +215,9 @@ gimp_gegl_config_set_property (GObject      *object,
     case PROP_TILE_CACHE_SIZE:
       gegl_config->tile_cache_size = g_value_get_uint64 (value);
       break;
+    case PROP_USE_OPENCL:
+      gegl_config->use_opencl = g_value_get_boolean (value);
+      break;
 
     case PROP_STINGY_MEMORY_USE:
       /* ignored */
@@ -246,6 +250,9 @@ gimp_gegl_config_get_property (GObject    *object,
       break;
     case PROP_TILE_CACHE_SIZE:
       g_value_set_uint64 (value, gegl_config->tile_cache_size);
+      break;
+    case PROP_USE_OPENCL:
+      g_value_set_boolean (value, gegl_config->use_opencl);
       break;
 
     case PROP_STINGY_MEMORY_USE:

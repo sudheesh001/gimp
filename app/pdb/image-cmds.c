@@ -57,6 +57,7 @@
 #include "core/gimpselection.h"
 #include "core/gimptempbuf.h"
 #include "core/gimpunit.h"
+#include "file/file-utils.h"
 #include "plug-in/gimpplugin.h"
 #include "plug-in/gimppluginmanager.h"
 #include "vectors/gimpvectors.h"
@@ -159,7 +160,7 @@ image_new_invoker (GimpProcedure         *procedure,
   if (success)
     {
       image = gimp_create_image (gimp, width, height, type,
-                                 GIMP_PRECISION_U8, FALSE);
+                                 GIMP_PRECISION_U8_GAMMA, FALSE);
 
       if (! image)
         success = FALSE;
@@ -200,7 +201,7 @@ image_new_with_precision_invoker (GimpProcedure         *procedure,
       if (gimp->plug_in_manager->current_plug_in)
         gimp_plug_in_enable_precision (gimp->plug_in_manager->current_plug_in);
 
-      if (type != GIMP_INDEXED || precision == GIMP_PRECISION_U8)
+      if (type != GIMP_INDEXED || precision == GIMP_PRECISION_U8_GAMMA)
         {
           image = gimp_create_image (gimp, width, height, type,
                                      precision, FALSE);
@@ -566,7 +567,7 @@ image_crop_invoker (GimpProcedure         *procedure,
       else
         gimp_image_crop (image, context,
                          offx, offy, offx + new_width, offy + new_height,
-                         FALSE, TRUE);
+                         TRUE);
     }
 
   return gimp_procedure_get_return_values (procedure, success,
@@ -1039,7 +1040,7 @@ image_insert_layer_invoker (GimpProcedure         *procedure,
                                        gimp_drawable_get_base_type (GIMP_DRAWABLE (layer)),
                                        error) &&
           (parent == NULL ||
-           (gimp_pdb_item_is_in_tree (GIMP_ITEM (parent), image, FALSE, error) &&
+           (gimp_pdb_item_is_in_tree (GIMP_ITEM (parent), image, 0, error) &&
             gimp_pdb_item_is_group (GIMP_ITEM (parent), error))))
         {
           if (position == -1 && parent == NULL)
@@ -1075,7 +1076,7 @@ image_remove_layer_invoker (GimpProcedure         *procedure,
 
   if (success)
     {
-      if (gimp_pdb_item_is_attached (GIMP_ITEM (layer), image, FALSE, error))
+      if (gimp_pdb_item_is_attached (GIMP_ITEM (layer), image, 0, error))
         gimp_image_remove_layer (image, layer, TRUE, NULL);
       else
         success = FALSE;
@@ -1142,7 +1143,7 @@ image_insert_channel_invoker (GimpProcedure         *procedure,
     {
       if (gimp_pdb_item_is_floating (GIMP_ITEM (channel), image, error) &&
           (parent == NULL ||
-           (gimp_pdb_item_is_in_tree (GIMP_ITEM (parent), image, FALSE, error) &&
+           (gimp_pdb_item_is_in_tree (GIMP_ITEM (parent), image, 0, error) &&
             gimp_pdb_item_is_group (GIMP_ITEM (parent), error))))
         {
           if (position == -1 && parent == NULL)
@@ -1178,7 +1179,7 @@ image_remove_channel_invoker (GimpProcedure         *procedure,
 
   if (success)
     {
-      if (gimp_pdb_item_is_attached (GIMP_ITEM (channel), image, FALSE, error))
+      if (gimp_pdb_item_is_attached (GIMP_ITEM (channel), image, 0, error))
         gimp_image_remove_channel (image, channel, TRUE, NULL);
       else
         success = FALSE;
@@ -1245,7 +1246,7 @@ image_insert_vectors_invoker (GimpProcedure         *procedure,
     {
       if (gimp_pdb_item_is_floating (GIMP_ITEM (vectors), image, error) &&
           (parent == NULL ||
-           (gimp_pdb_item_is_in_tree (GIMP_ITEM (parent), image, FALSE, error) &&
+           (gimp_pdb_item_is_in_tree (GIMP_ITEM (parent), image, 0, error) &&
             gimp_pdb_item_is_group (GIMP_ITEM (parent), error))))
         {
           if (position == -1 && parent == NULL)
@@ -1281,7 +1282,7 @@ image_remove_vectors_invoker (GimpProcedure         *procedure,
 
   if (success)
     {
-      if (gimp_pdb_item_is_attached (GIMP_ITEM (vectors), image, FALSE, error))
+      if (gimp_pdb_item_is_attached (GIMP_ITEM (vectors), image, 0, error))
         gimp_image_remove_vectors (image, vectors, TRUE, NULL);
       else
         success = FALSE;
@@ -1310,7 +1311,7 @@ image_get_item_position_invoker (GimpProcedure         *procedure,
 
   if (success)
     {
-      if (gimp_pdb_item_is_in_tree (item, image, FALSE, error))
+      if (gimp_pdb_item_is_in_tree (item, image, 0, error))
         position = gimp_item_get_index (item);
       else
         success = FALSE;
@@ -1342,7 +1343,7 @@ image_raise_item_invoker (GimpProcedure         *procedure,
 
   if (success)
     {
-      if (gimp_pdb_item_is_in_tree (item, image, FALSE, error))
+      if (gimp_pdb_item_is_in_tree (item, image, 0, error))
         success = gimp_image_raise_item (image, item, error);
       else
         success = FALSE;
@@ -1369,7 +1370,7 @@ image_lower_item_invoker (GimpProcedure         *procedure,
 
   if (success)
     {
-      if (gimp_pdb_item_is_in_tree (item, image, FALSE, error))
+      if (gimp_pdb_item_is_in_tree (item, image, 0, error))
         success = gimp_image_lower_item (image, item, error);
       else
         success = FALSE;
@@ -1396,7 +1397,7 @@ image_raise_item_to_top_invoker (GimpProcedure         *procedure,
 
   if (success)
     {
-      if (gimp_pdb_item_is_in_tree (item, image, FALSE, error))
+      if (gimp_pdb_item_is_in_tree (item, image, 0, error))
         success = gimp_image_raise_item_to_top (image, item);
       else
         success = FALSE;
@@ -1423,7 +1424,7 @@ image_lower_item_to_bottom_invoker (GimpProcedure         *procedure,
 
   if (success)
     {
-      if (gimp_pdb_item_is_in_tree (item, image, FALSE, error))
+      if (gimp_pdb_item_is_in_tree (item, image, 0, error))
         success = gimp_image_lower_item_to_bottom (image, item);
       else
         success = FALSE;
@@ -1454,7 +1455,7 @@ image_reorder_item_invoker (GimpProcedure         *procedure,
 
   if (success)
     {
-      if (gimp_pdb_item_is_in_tree (item, image, FALSE, error) &&
+      if (gimp_pdb_item_is_in_tree (item, image, 0, error) &&
           (parent == NULL ||
            (gimp_pdb_item_is_in_same_tree (item, parent, image, error) &&
             gimp_pdb_item_is_group (parent, error) &&
@@ -1488,7 +1489,7 @@ image_flatten_invoker (GimpProcedure         *procedure,
 
   if (success)
     {
-      layer = gimp_image_flatten (image, context);
+      layer = gimp_image_flatten (image, context, error);
 
       if (! layer)
         success = FALSE;
@@ -1559,7 +1560,7 @@ image_merge_down_invoker (GimpProcedure         *procedure,
 
   if (success)
     {
-      if (gimp_pdb_item_is_attached (GIMP_ITEM (merge_layer), image, FALSE, error))
+      if (gimp_pdb_item_is_attached (GIMP_ITEM (merge_layer), image, 0, error))
         {
           layer = gimp_image_merge_down (image, merge_layer, context, merge_type,
                                          error);
@@ -1629,7 +1630,12 @@ image_remove_layer_mask_invoker (GimpProcedure         *procedure,
 
   if (success)
     {
-      if (gimp_pdb_item_is_attached (GIMP_ITEM (layer), image, mode == GIMP_MASK_APPLY, error) &&
+      GimpPDBItemModify modify = 0;
+
+      if (mode == GIMP_MASK_APPLY)
+        modify |= GIMP_PDB_ITEM_CONTENT;
+
+      if (gimp_pdb_item_is_attached (GIMP_ITEM (layer), image, modify, error) &&
           gimp_layer_get_mask (layer))
         gimp_layer_apply_mask (layer, mode, TRUE);
       else
@@ -2371,7 +2377,11 @@ image_get_name_invoker (GimpProcedure         *procedure,
 
   if (success)
     {
-      name = g_strdup (gimp_image_get_display_name (image));
+      /* XXX do we really want to return this, or the name as in the title? */
+
+      const gchar *uri = gimp_image_get_uri_or_untitled (image);
+
+      name = file_utils_uri_display_basename (uri);
     }
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
@@ -2920,7 +2930,7 @@ register_image_procs (GimpPDB *pdb)
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_int32_array ("image-ids",
                                                                 "image ids",
-                                                                "The list of images currently open",
+                                                                "The list of images currently open. The returned value must be freed with g_free()",
                                                                 GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -2976,7 +2986,7 @@ register_image_procs (GimpPDB *pdb)
   gimp_procedure_set_static_strings (procedure,
                                      "gimp-image-new-with-precision",
                                      "Creates a new image with the specified width, height, type and precision.",
-                                     "Creates a new image, undisplayed with the specified extents, type and precision. Indexed images can only be created at GIMP_PRECISION_U8 precision. See 'gimp-image-new' for further details.",
+                                     "Creates a new image, undisplayed with the specified extents, type and precision. Indexed images can only be created at GIMP_PRECISION_U8_GAMMA precision. See 'gimp-image-new' for further details.",
                                      "Michael Natterer <mitch@gimp.org>",
                                      "Michael Natterer",
                                      "2012",
@@ -3005,7 +3015,7 @@ register_image_procs (GimpPDB *pdb)
                                                   "precision",
                                                   "The precision",
                                                   GIMP_TYPE_PRECISION,
-                                                  GIMP_PRECISION_U8,
+                                                  GIMP_PRECISION_U8_LINEAR,
                                                   GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_image_id ("image",
@@ -3123,7 +3133,7 @@ register_image_procs (GimpPDB *pdb)
                                                       "precision",
                                                       "The image's precision",
                                                       GIMP_TYPE_PRECISION,
-                                                      GIMP_PRECISION_U8,
+                                                      GIMP_PRECISION_U8_LINEAR,
                                                       GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -3494,7 +3504,7 @@ register_image_procs (GimpPDB *pdb)
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_int32_array ("layer-ids",
                                                                 "layer ids",
-                                                                "The list of layers contained in the image",
+                                                                "The list of layers contained in the image. The returned value must be freed with g_free()",
                                                                 GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -3508,7 +3518,7 @@ register_image_procs (GimpPDB *pdb)
   gimp_procedure_set_static_strings (procedure,
                                      "gimp-image-get-channels",
                                      "Returns the list of channels contained in the specified image.",
-                                     "This procedure returns the list of channels contained in the specified image. This does not include the selection mask, or layer masks. The order is from topmost to bottommost.",
+                                     "This procedure returns the list of channels contained in the specified image. This does not include the selection mask, or layer masks. The order is from topmost to bottommost. Note that \"channels\" are custom channels and do not include the image's color components.",
                                      "Spencer Kimball & Peter Mattis",
                                      "Spencer Kimball & Peter Mattis",
                                      "1995-1996",
@@ -3528,7 +3538,7 @@ register_image_procs (GimpPDB *pdb)
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_int32_array ("channel-ids",
                                                                 "channel ids",
-                                                                "The list of channels contained in the image",
+                                                                "The list of channels contained in the image. The returned value must be freed with g_free()",
                                                                 GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -3562,7 +3572,7 @@ register_image_procs (GimpPDB *pdb)
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_int32_array ("vector-ids",
                                                                 "vector ids",
-                                                                "The list of vectors contained in the image",
+                                                                "The list of vectors contained in the image. The returned value must be freed with g_free()",
                                                                 GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -3828,7 +3838,7 @@ register_image_procs (GimpPDB *pdb)
   gimp_procedure_set_static_strings (procedure,
                                      "gimp-image-insert-layer",
                                      "Add the specified layer to the image.",
-                                     "This procedure adds the specified layer to the image at the given position. If the specified parent is a valid layer group (See 'gimp-item-is-group' and 'gimp-layer-group-new') then the layer is added inside the group. If the parent is 0, the layer is added inside the main stack, outside of any group. The position argument specifies the location of the layer inside the stack (or the group, if a valid parent was supplied), starting from the top (0) and increasing. If the position is specified as -1 and the parent is specified as 0, then the layer is inserted above the active layer. The layer type must be compatible with the image base type.",
+                                     "This procedure adds the specified layer to the image at the given position. If the specified parent is a valid layer group (See 'gimp-item-is-group' and 'gimp-layer-group-new') then the layer is added inside the group. If the parent is 0, the layer is added inside the main stack, outside of any group. The position argument specifies the location of the layer inside the stack (or the group, if a valid parent was supplied), starting from the top (0) and increasing. If the position is specified as -1 and the parent is specified as 0, then the layer is inserted above the active layer, or inside the group if the active layer is a layer group. The layer type must be compatible with the image base type.",
                                      "Spencer Kimball & Peter Mattis",
                                      "Spencer Kimball & Peter Mattis",
                                      "1995-1996",
@@ -4502,7 +4512,7 @@ register_image_procs (GimpPDB *pdb)
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_int8_array ("colormap",
                                                                "colormap",
-                                                               "The image's colormap",
+                                                               "The image's colormap. The returned value must be freed with g_free()",
                                                                GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -5027,7 +5037,7 @@ register_image_procs (GimpPDB *pdb)
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_string ("filename",
                                                            "filename",
-                                                           "The filename",
+                                                           "The filename. The returned value must be freed with g_free()",
                                                            FALSE, FALSE, FALSE,
                                                            NULL,
                                                            GIMP_PARAM_READWRITE));
@@ -5087,7 +5097,7 @@ register_image_procs (GimpPDB *pdb)
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_string ("uri",
                                                            "uri",
-                                                           "The URI",
+                                                           "The URI. The returned value must be freed with g_free()",
                                                            FALSE, FALSE, FALSE,
                                                            NULL,
                                                            GIMP_PARAM_READWRITE));
@@ -5117,7 +5127,7 @@ register_image_procs (GimpPDB *pdb)
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_string ("uri",
                                                            "uri",
-                                                           "The imported URI",
+                                                           "The imported URI. The returned value must be freed with g_free()",
                                                            FALSE, FALSE, FALSE,
                                                            NULL,
                                                            GIMP_PARAM_READWRITE));
@@ -5147,7 +5157,7 @@ register_image_procs (GimpPDB *pdb)
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_string ("uri",
                                                            "uri",
-                                                           "The imported URI",
+                                                           "The imported URI. The returned value must be freed with g_free()",
                                                            FALSE, FALSE, FALSE,
                                                            NULL,
                                                            GIMP_PARAM_READWRITE));
@@ -5177,7 +5187,7 @@ register_image_procs (GimpPDB *pdb)
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_string ("uri",
                                                            "uri",
-                                                           "The exported URI",
+                                                           "The exported URI. The returned value must be freed with g_free()",
                                                            FALSE, FALSE, FALSE,
                                                            NULL,
                                                            GIMP_PARAM_READWRITE));
@@ -5207,7 +5217,7 @@ register_image_procs (GimpPDB *pdb)
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_string ("name",
                                                            "name",
-                                                           "The name",
+                                                           "The name. The returned value must be freed with g_free()",
                                                            FALSE, FALSE, FALSE,
                                                            NULL,
                                                            GIMP_PARAM_READWRITE));

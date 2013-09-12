@@ -87,6 +87,7 @@ static gboolean        gimp_group_layer_get_expanded (GimpViewable    *viewable)
 static void            gimp_group_layer_set_expanded (GimpViewable    *viewable,
                                                       gboolean         expanded);
 
+static gboolean  gimp_group_layer_is_position_locked (const GimpItem  *item);
 static GimpItem      * gimp_group_layer_duplicate    (GimpItem        *item,
                                                       GType            new_type);
 static void            gimp_group_layer_convert      (GimpItem        *item,
@@ -124,7 +125,6 @@ static void            gimp_group_layer_transform    (GimpItem        *item,
                                                       const GimpMatrix3 *matrix,
                                                       GimpTransformDirection direction,
                                                       GimpInterpolationType  interpolation_type,
-                                                      gint             recursion_level,
                                                       GimpTransformResize clip_result,
                                                       GimpProgress    *progress);
 
@@ -133,8 +133,11 @@ static gint64      gimp_group_layer_estimate_memsize (const GimpDrawable *drawab
                                                       gint             height);
 static void            gimp_group_layer_convert_type (GimpDrawable      *drawable,
                                                       GimpImage         *dest_image,
+                                                      const Babl        *new_format,
                                                       GimpImageBaseType  new_base_type,
                                                       GimpPrecision      new_precision,
+                                                      gint               layer_dither_type,
+                                                      gint               mask_dither_type,
                                                       gboolean           push_undo);
 
 static const Babl    * gimp_group_layer_get_format   (GimpProjectable *projectable);
@@ -205,6 +208,7 @@ gimp_group_layer_class_init (GimpGroupLayerClass *klass)
   viewable_class->set_expanded     = gimp_group_layer_set_expanded;
   viewable_class->get_expanded     = gimp_group_layer_get_expanded;
 
+  item_class->is_position_locked   = gimp_group_layer_is_position_locked;
   item_class->duplicate            = gimp_group_layer_duplicate;
   item_class->convert              = gimp_group_layer_convert;
   item_class->translate            = gimp_group_layer_translate;
@@ -400,6 +404,25 @@ gimp_group_layer_set_expanded (GimpViewable *viewable,
   GimpGroupLayer *group = GIMP_GROUP_LAYER (viewable);
 
   GET_PRIVATE (group)->expanded = expanded;
+}
+
+static gboolean
+gimp_group_layer_is_position_locked (const GimpItem *item)
+{
+  GimpGroupLayerPrivate *private = GET_PRIVATE (item);
+  GList                 *list;
+
+  for (list = gimp_item_stack_get_item_iter (GIMP_ITEM_STACK (private->children));
+       list;
+       list = g_list_next (list))
+    {
+      GimpItem *child = list->data;
+
+      if (gimp_item_is_position_locked (child))
+        return TRUE;
+    }
+
+  return GIMP_ITEM_CLASS (parent_class)->is_position_locked (item);
 }
 
 static GimpItem *
@@ -745,7 +768,6 @@ gimp_group_layer_transform (GimpItem               *item,
                             const GimpMatrix3      *matrix,
                             GimpTransformDirection  direction,
                             GimpInterpolationType   interpolation_type,
-                            gint                    recursion_level,
                             GimpTransformResize     clip_result,
                             GimpProgress           *progress)
 {
@@ -764,7 +786,7 @@ gimp_group_layer_transform (GimpItem               *item,
 
       gimp_item_transform (child, context,
                            matrix, direction,
-                           interpolation_type, recursion_level,
+                           interpolation_type,
                            clip_result, progress);
     }
 
@@ -773,7 +795,7 @@ gimp_group_layer_transform (GimpItem               *item,
   if (mask)
     gimp_item_transform (GIMP_ITEM (mask), context,
                          matrix, direction,
-                         interpolation_type, recursion_level,
+                         interpolation_type,
                          clip_result, progress);
 
   gimp_group_layer_resume_resize (group, TRUE);
@@ -811,7 +833,9 @@ gimp_group_layer_estimate_memsize (const GimpDrawable *drawable,
 
   base_type = gimp_drawable_get_base_type (drawable);
 
-  memsize += gimp_projection_estimate_memsize (base_type, width, height);
+  memsize += gimp_projection_estimate_memsize (base_type,
+                                               gimp_drawable_get_precision (drawable),
+                                               width, height);
 
   return memsize + GIMP_DRAWABLE_CLASS (parent_class)->estimate_memsize (drawable,
                                                                          width,
@@ -820,7 +844,8 @@ gimp_group_layer_estimate_memsize (const GimpDrawable *drawable,
 
 static const Babl *
 get_projection_format (GimpProjectable   *projectable,
-                       GimpImageBaseType  base_type)
+                       GimpImageBaseType  base_type,
+                       GimpPrecision      precision)
 {
   GimpImage *image = gimp_item_get_image (GIMP_ITEM (projectable));
 
@@ -828,14 +853,10 @@ get_projection_format (GimpProjectable   *projectable,
     {
     case GIMP_RGB:
     case GIMP_INDEXED:
-      return gimp_image_get_format (image, GIMP_RGB,
-                                    gimp_image_get_precision (image),
-                                    TRUE);
+      return gimp_image_get_format (image, GIMP_RGB, precision, TRUE);
 
     case GIMP_GRAY:
-      return gimp_image_get_format (image, GIMP_GRAY,
-                                    gimp_image_get_precision (image),
-                                    TRUE);
+      return gimp_image_get_format (image, GIMP_GRAY, precision, TRUE);
     }
 
   g_assert_not_reached ();
@@ -846,8 +867,11 @@ get_projection_format (GimpProjectable   *projectable,
 static void
 gimp_group_layer_convert_type (GimpDrawable      *drawable,
                                GimpImage         *dest_image,
+                               const Babl        *new_format /* unused */,
                                GimpImageBaseType  new_base_type,
                                GimpPrecision      new_precision,
+                               gint               layer_dither_type,
+                               gint               mask_dither_type,
                                gboolean           push_undo)
 {
   GimpGroupLayer        *group   = GIMP_GROUP_LAYER (drawable);
@@ -867,8 +891,10 @@ gimp_group_layer_convert_type (GimpDrawable      *drawable,
    *  depth
    */
   private->convert_format = get_projection_format (GIMP_PROJECTABLE (drawable),
-                                                   new_base_type);
+                                                   new_base_type,
+                                                   new_precision);
   gimp_projectable_structure_changed (GIMP_PROJECTABLE (drawable));
+  gimp_pickable_flush (GIMP_PICKABLE (private->projection));
 
   buffer = gimp_pickable_get_buffer (GIMP_PICKABLE (private->projection));
 
@@ -887,9 +913,10 @@ gimp_group_layer_convert_type (GimpDrawable      *drawable,
       new_precision != gimp_drawable_get_precision (GIMP_DRAWABLE (mask)))
     {
       gimp_drawable_convert_type (GIMP_DRAWABLE (mask), dest_image,
-                                  GIMP_GRAY, new_precision, push_undo);
+                                  GIMP_GRAY, new_precision,
+                                  layer_dither_type, mask_dither_type,
+                                  push_undo);
     }
-
 }
 
 static const Babl *
@@ -897,13 +924,15 @@ gimp_group_layer_get_format (GimpProjectable *projectable)
 {
   GimpGroupLayerPrivate *private = GET_PRIVATE (projectable);
   GimpImageBaseType      base_type;
+  GimpPrecision          precision;
 
   if (private->convert_format)
     return private->convert_format;
 
   base_type = gimp_drawable_get_base_type (GIMP_DRAWABLE (projectable));
+  precision = gimp_drawable_get_precision (GIMP_DRAWABLE (projectable));
 
-  return get_projection_format (projectable, base_type);
+  return get_projection_format (projectable, base_type, precision);
 }
 
 static GeglNode *
@@ -922,7 +951,7 @@ gimp_group_layer_get_graph (GimpProjectable *projectable)
   private->graph = gegl_node_new ();
 
   layers_node =
-    gimp_drawable_stack_get_graph (GIMP_DRAWABLE_STACK (private->children));
+    gimp_filter_stack_get_graph (GIMP_FILTER_STACK (private->children));
 
   gegl_node_add_child (private->graph, layers_node);
 
@@ -1140,6 +1169,7 @@ gimp_group_layer_update_size (GimpGroupLayer *group)
           private->reallocate_height = height;
 
           gimp_projectable_structure_changed (GIMP_PROJECTABLE (group));
+          gimp_pickable_flush (GIMP_PICKABLE (private->projection));
 
           buffer = gimp_pickable_get_buffer (GIMP_PICKABLE (private->projection));
 

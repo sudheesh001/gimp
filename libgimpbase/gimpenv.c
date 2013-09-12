@@ -63,6 +63,20 @@
 #define gid_t gint
 #define geteuid() 0
 #define getegid() 0
+
+/* This is a hack for Windows known directory support.
+ * DATADIR (autotools-generated constant) is a type defined in objidl.h
+ * so we must #undef it before including shlobj.h in order to avoid a
+ * name clash. */
+static const char* datadir = DATADIR;
+#undef DATADIR
+#include <shlobj.h>
+#define DATADIR datadir
+/* Constant available since Shell32.dll 4.72 */
+#ifndef CSIDL_APPDATA
+#define CSIDL_APPDATA 0x001a
+#endif
+
 #endif
 
 
@@ -76,8 +90,12 @@
  **/
 
 
-static gchar * gimp_env_get_dir (const gchar *gimp_env_name,
-                                 const gchar *env_dir);
+static gchar * gimp_env_get_dir   (const gchar *gimp_env_name,
+                                   const gchar *compile_time_dir,
+                                   const gchar *relative_subdir);
+#ifdef G_OS_WIN32
+static gchar * get_special_folder (gint         csidl);
+#endif
 
 
 const guint gimp_major_version = GIMP_MAJOR_VERSION;
@@ -115,7 +133,9 @@ gimp_env_init (gboolean plug_in)
       /* Set $LD_LIBRARY_PATH to ensure that plugins can be loaded. */
 
       const gchar *ldpath = g_getenv ("LD_LIBRARY_PATH");
-      gchar       *libdir = _gimp_reloc_find_lib_dir (NULL);
+      gchar       *libdir = g_build_filename (gimp_installation_directory (),
+                                              "lib",
+                                              NULL);
 
       if (ldpath && *ldpath)
         {
@@ -146,15 +166,26 @@ gimp_env_init (gboolean plug_in)
  * to be a subdirectory of gimp_data_directory().
  *
  * The usual case is that no GIMP2_DIRECTORY environment variable
- * exists, and then we use the GIMPDIR subdirectory of the home
- * directory. If no home directory exists, we use a per-user
- * subdirectory of gimp_data_directory().  In any case, we always
- * return some non-empty string, whether it corresponds to an existing
- * directory or not.
+ * exists, and then we use the GIMPDIR subdirectory of the local
+ * configuration directory:
+ *
+ * - UNIX: $XDG_CONFIG_HOME (defaults to $HOME/.config/)
+ *
+ * - Windows: CSIDL_APPDATA
+ *
+ * - OSX (UNIX exception): the Application Support Directory.
+ *
+ * If neither the configuration nor home directory exist,
+ * g_get_user_config_dir() will return {tmp}/{user_name}/.config/ where
+ * the temporary directory {tmp} and the {user_name} are determined
+ * according to platform rules.
+ *
+ * In any case, we always return some non-empty string, whether it
+ * corresponds to an existing directory or not.
  *
  * The returned string is owned by GIMP and must not be modified or
  * freed. The returned string is in the encoding used for filenames by
- * GLib, which isn't necessarily UTF-8. (On Windows it always is
+ * GLib, which isn't necessarily UTF-8 (on Windows it is always
  * UTF-8.)
  *
  * Returns: The user-specific GIMP settings directory.
@@ -166,7 +197,6 @@ gimp_directory (void)
   static gchar *last_env_gimp_dir = NULL;
 
   const gchar  *env_gimp_dir;
-  const gchar  *home_dir;
 
   env_gimp_dir = g_getenv ("GIMP2_DIRECTORY");
 
@@ -205,8 +235,6 @@ gimp_directory (void)
   g_free (last_env_gimp_dir);
   last_env_gimp_dir = g_strdup (env_gimp_dir);
 
-  home_dir = g_get_home_dir ();
-
   if (env_gimp_dir)
     {
       if (g_path_is_absolute (env_gimp_dir))
@@ -215,17 +243,12 @@ gimp_directory (void)
         }
       else
         {
+          const gchar *home_dir = g_get_home_dir ();
+
           if (home_dir)
-            {
-              gimp_dir = g_build_filename (home_dir,
-                                           env_gimp_dir,
-                                           NULL);
-            }
+            gimp_dir = g_build_filename (home_dir, env_gimp_dir, NULL);
           else
-            {
-              gimp_dir = g_build_filename (gimp_data_directory (),
-                                           env_gimp_dir, NULL);
-            }
+            gimp_dir = g_build_filename (gimp_data_directory (), env_gimp_dir, NULL);
         }
     }
   else
@@ -238,54 +261,30 @@ gimp_directory (void)
 
       pool = [[NSAutoreleasePool alloc] init];
 
-      path = NSSearchPathForDirectoriesInDomains (NSLibraryDirectory,
+      path = NSSearchPathForDirectoriesInDomains (NSApplicationSupportDirectory,
                                                   NSUserDomainMask, YES);
       library_dir = [path objectAtIndex:0];
 
       gimp_dir = g_build_filename ([library_dir UTF8String],
-                                   "GIMP", GIMP_USER_VERSION,
-                                   NULL);
+                                   GIMPDIR, GIMP_USER_VERSION, NULL);
 
       [pool drain];
 
-#else /* ! PLATFORM_OSX */
+#elif defined G_OS_WIN32
 
-      if (home_dir)
-        {
-          gimp_dir = g_build_filename (home_dir, GIMPDIR, NULL);
-        }
-      else
-        {
-          gchar *user_name = g_strdup (g_get_user_name ());
-          gchar *subdir_name;
+      gchar *conf_dir = get_special_folder (CSIDL_APPDATA);
 
-#ifdef G_OS_WIN32
-          gchar *p = user_name;
+      gimp_dir = g_build_filename (conf_dir,
+                                   GIMPDIR, GIMP_USER_VERSION, NULL);
+      g_free(conf_dir);
 
-          while (*p)
-            {
-              /* Replace funny characters in the user name with an
-               * underscore. The code below also replaces some
-               * characters that in fact are legal in file names, but
-               * who cares, as long as the definitely illegal ones are
-               * caught.
-               */
-              if (!g_ascii_isalnum (*p) && !strchr ("-.,@=", *p))
-                *p = '_';
-              p++;
-            }
-#endif
+#else /* UNIX */
 
-#ifndef G_OS_WIN32
-          g_message ("warning: no home directory.");
-#endif
-          subdir_name = g_strconcat (GIMPDIR ".", user_name, NULL);
-          gimp_dir = g_build_filename (gimp_data_directory (),
-                                       subdir_name,
-                                       NULL);
-          g_free (user_name);
-          g_free (subdir_name);
-        }
+      /* g_get_user_config_dir () always returns a path as a non-null
+       * and non-empty string
+       */
+      gimp_dir = g_build_filename (g_get_user_config_dir (),
+                                   GIMPDIR, GIMP_USER_VERSION, NULL);
 
 #endif /* PLATFORM_OSX */
     }
@@ -295,11 +294,33 @@ gimp_directory (void)
 
 #ifdef G_OS_WIN32
 
+/* Taken from glib 2.35 code. */
+static gchar *
+get_special_folder (int csidl)
+{
+  wchar_t      path[MAX_PATH+1];
+  HRESULT      hr;
+  LPITEMIDLIST pidl = NULL;
+  BOOL         b;
+  gchar       *retval = NULL;
+
+  hr = SHGetSpecialFolderLocation (NULL, csidl, &pidl);
+  if (hr == S_OK)
+    {
+      b = SHGetPathFromIDListW (pidl, path);
+      if (b)
+        retval = g_utf16_to_utf8 (path, -1, NULL, NULL, NULL);
+      CoTaskMemFree (pidl);
+    }
+
+  return retval;
+}
+
 static HMODULE libgimpbase_dll = NULL;
 
 /* Minimal DllMain that just stores the handle to this DLL */
 
-BOOL WINAPI			/* Avoid silly "no previous prototype" gcc warning */
+BOOL WINAPI /* Avoid silly "no previous prototype" gcc warning */
 DllMain (HINSTANCE hinstDLL,
 	 DWORD     fdwReason,
 	 LPVOID    lpvReserved);
@@ -349,39 +370,9 @@ gimp_installation_directory (void)
 
 #ifdef G_OS_WIN32
 
-  {
-    /* Figure it out from the location of this DLL */
-    gchar *filename;
-    gchar *sep1, *sep2;
-
-    wchar_t w_filename[MAX_PATH];
-
-    if (GetModuleFileNameW (libgimpbase_dll, w_filename, G_N_ELEMENTS (w_filename)) == 0)
-      g_error ("GetModuleFilenameW failed");
-
-    filename = g_utf16_to_utf8 (w_filename, -1, NULL, NULL, NULL);
-    if (filename == NULL)
-      g_error ("Converting module filename to UTF-8 failed");
-
-    /* If the DLL file name is of the format
-     * <foobar>\bin\*.dll, use <foobar>.
-     * Otherwise, use the directory where the DLL is.
-     */
-
-    sep1 = strrchr (filename, '\\');
-    *sep1 = '\0';
-
-    sep2 = strrchr (filename, '\\');
-    if (sep2 != NULL)
-      {
-        if (g_ascii_strcasecmp (sep2 + 1, "bin") == 0)
-          {
-            *sep2 = '\0';
-          }
-      }
-
-    toplevel = filename;
-  }
+  toplevel = g_win32_get_package_installation_directory_of_module (libgimpbase_dll);
+  if (! toplevel)
+    g_error ("g_win32_get_package_installation_directory_of_module() failed");
 
 #elif PLATFORM_OSX
 
@@ -469,9 +460,12 @@ gimp_data_directory (void)
 
   if (! gimp_data_dir)
     {
-      gchar *tmp = _gimp_reloc_find_data_dir (DATADIR);
+      gchar *tmp = g_build_filename ("share",
+                                     GIMP_PACKAGE,
+                                     GIMP_DATA_VERSION,
+                                     NULL);
 
-      gimp_data_dir = gimp_env_get_dir ("GIMP2_DATADIR", tmp);
+      gimp_data_dir = gimp_env_get_dir ("GIMP2_DATADIR", DATADIR, tmp);
       g_free (tmp);
     }
 
@@ -504,10 +498,13 @@ gimp_locale_directory (void)
 
   if (! gimp_locale_dir)
     {
-      gchar *tmp = _gimp_reloc_find_locale_dir (LOCALEDIR);
+      gchar *tmp = g_build_filename ("share",
+                                     "locale",
+                                     NULL);
 
-      gimp_locale_dir = gimp_env_get_dir ("GIMP2_LOCALEDIR", tmp);
+      gimp_locale_dir = gimp_env_get_dir ("GIMP2_LOCALEDIR", LOCALEDIR, tmp);
       g_free (tmp);
+
 #ifdef G_OS_WIN32
       tmp = g_win32_locale_filename_from_utf8 (gimp_locale_dir);
       g_free (gimp_locale_dir);
@@ -541,9 +538,12 @@ gimp_sysconf_directory (void)
 
   if (! gimp_sysconf_dir)
     {
-      gchar *tmp = _gimp_reloc_find_etc_dir (SYSCONFDIR);
+      gchar *tmp = g_build_filename ("etc",
+                                     GIMP_PACKAGE,
+                                     GIMP_SYSCONF_VERSION,
+                                     NULL);
 
-      gimp_sysconf_dir = gimp_env_get_dir ("GIMP2_SYSCONFDIR", tmp);
+      gimp_sysconf_dir = gimp_env_get_dir ("GIMP2_SYSCONFDIR", SYSCONFDIR, tmp);
       g_free (tmp);
     }
 
@@ -590,9 +590,12 @@ gimp_plug_in_directory (void)
 
   if (! gimp_plug_in_dir)
     {
-      gchar *tmp = _gimp_reloc_find_plugin_dir (PLUGINDIR);
+      gchar *tmp = g_build_filename ("lib",
+                                     GIMP_PACKAGE,
+                                     GIMP_PLUGIN_VERSION,
+                                     NULL);
 
-      gimp_plug_in_dir = gimp_env_get_dir ("GIMP2_PLUGINDIR", tmp);
+      gimp_plug_in_dir = gimp_env_get_dir ("GIMP2_PLUGINDIR", PLUGINDIR, tmp);
       g_free (tmp);
     }
 
@@ -729,17 +732,14 @@ gimp_path_parse (const gchar  *path,
                  gboolean      check,
                  GList       **check_failed)
 {
-  const gchar  *home;
-  gchar       **patharray;
-  GList        *list      = NULL;
-  GList        *fail_list = NULL;
-  gint          i;
-  gboolean      exists    = TRUE;
+  gchar    **patharray;
+  GList     *list      = NULL;
+  GList     *fail_list = NULL;
+  gint       i;
+  gboolean   exists    = TRUE;
 
   if (!path || !*path || max_paths < 1 || max_paths > 256)
     return NULL;
-
-  home = g_get_home_dir ();
 
   patharray = g_strsplit (path, G_SEARCHPATH_SEPARATOR_S, max_paths);
 
@@ -753,7 +753,7 @@ gimp_path_parse (const gchar  *path,
 #ifndef G_OS_WIN32
       if (*patharray[i] == '~')
         {
-          dir = g_string_new (home);
+          dir = g_string_new (g_get_home_dir ());
           g_string_append (dir, patharray[i] + 1);
         }
       else
@@ -888,7 +888,8 @@ gimp_path_get_user_writable_dir (GList *path)
 
 static gchar *
 gimp_env_get_dir (const gchar *gimp_env_name,
-                  const gchar *env_dir)
+                  const gchar *compile_time_dir,
+                  const gchar *relative_subdir)
 {
   const gchar *env = g_getenv (gimp_env_name);
 
@@ -900,12 +901,16 @@ gimp_env_get_dir (const gchar *gimp_env_name,
 
       return g_strdup (env);
     }
-  else
+  else if (compile_time_dir)
     {
-      gchar *retval = g_strdup (env_dir);
+      gchar *retval = g_strdup (compile_time_dir);
 
       gimp_path_runtime_fix (&retval);
 
       return retval;
     }
+
+  return g_build_filename (gimp_installation_directory (),
+                           relative_subdir,
+                           NULL);
 }

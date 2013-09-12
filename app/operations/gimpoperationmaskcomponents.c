@@ -44,6 +44,11 @@ static void       gimp_operation_mask_components_set_property (GObject          
                                                                GParamSpec          *pspec);
 
 static void       gimp_operation_mask_components_prepare      (GeglOperation       *operation);
+static gboolean gimp_operation_mask_components_parent_process (GeglOperation        *operation,
+                                                               GeglOperationContext *context,
+                                                               const gchar          *output_prop,
+                                                               const GeglRectangle  *result,
+                                                               gint                  level);
 static gboolean   gimp_operation_mask_components_process      (GeglOperation       *operation,
                                                                void                *in_buf,
                                                                void                *aux_buf,
@@ -76,6 +81,7 @@ gimp_operation_mask_components_class_init (GimpOperationMaskComponentsClass *kla
                                  NULL);
 
   operation_class->prepare = gimp_operation_mask_components_prepare;
+  operation_class->process = gimp_operation_mask_components_parent_process;
 
   point_class->process     = gimp_operation_mask_components_process;
 
@@ -137,9 +143,56 @@ gimp_operation_mask_components_set_property (GObject      *object,
 static void
 gimp_operation_mask_components_prepare (GeglOperation *operation)
 {
-  gegl_operation_set_format (operation, "input",  babl_format ("RGBA float"));
-  gegl_operation_set_format (operation, "aux",    babl_format ("RGBA float"));
-  gegl_operation_set_format (operation, "output", babl_format ("RGBA float"));
+  const Babl *format = gegl_operation_get_source_format (operation, "input");
+
+  if (format)
+    {
+      const Babl *model = babl_format_get_model (format);
+
+      if (model == babl_model ("R'G'B'A"))
+        format = babl_format ("R'G'B'A float");
+      else
+        format = babl_format ("RGBA float");
+    }
+  else
+    {
+      format = babl_format ("RGBA float");
+    }
+
+  gegl_operation_set_format (operation, "input",  format);
+  gegl_operation_set_format (operation, "aux",    format);
+  gegl_operation_set_format (operation, "output", format);
+}
+
+static gboolean
+gimp_operation_mask_components_parent_process (GeglOperation        *operation,
+                                               GeglOperationContext *context,
+                                               const gchar          *output_prop,
+                                               const GeglRectangle  *result,
+                                               gint                  level)
+{
+  GimpOperationMaskComponents *self = GIMP_OPERATION_MASK_COMPONENTS (operation);
+
+  if (self->mask == 0)
+    {
+      GObject *input = gegl_operation_context_get_object (context, "input");
+
+      gegl_operation_context_set_object (context, "output", input);
+
+      return TRUE;
+    }
+  else if (self->mask == GIMP_COMPONENT_ALL)
+    {
+      GObject *aux = gegl_operation_context_get_object (context, "aux");
+
+      gegl_operation_context_set_object (context, "output", aux);
+
+      return TRUE;
+    }
+
+  return GEGL_OPERATION_CLASS (parent_class)->process (operation, context,
+                                                       output_prop, result,
+                                                       level);
 }
 
 static gboolean
@@ -156,6 +209,10 @@ gimp_operation_mask_components_process (GeglOperation       *operation,
   gfloat                      *aux  = aux_buf;
   gfloat                      *dest = out_buf;
   GimpComponentMask            mask = self->mask;
+  static const gfloat          nothing[] = { 0.0, 0.0, 0.0, 1.0 };
+
+  if (! aux)
+    aux = (gfloat *) nothing;
 
   while (samples--)
     {
@@ -164,8 +221,11 @@ gimp_operation_mask_components_process (GeglOperation       *operation,
       dest[BLUE]  = (mask & GIMP_COMPONENT_BLUE)  ? aux[BLUE]  : src[BLUE];
       dest[ALPHA] = (mask & GIMP_COMPONENT_ALPHA) ? aux[ALPHA] : src[ALPHA];
 
-      src  += 4;
-      aux  += 4;
+      src += 4;
+
+      if (aux_buf)
+        aux  += 4;
+
       dest += 4;
     }
 

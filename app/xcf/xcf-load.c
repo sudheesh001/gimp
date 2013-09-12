@@ -70,7 +70,10 @@
 #include "gimp-intl.h"
 
 
+#define MAX_XCF_PARASITE_DATA_LEN (256L * 1024 * 1024)
+
 /* #define GIMP_XCF_PATH_DEBUG */
+
 
 static void            xcf_load_add_masks     (GimpImage     *image);
 static gboolean        xcf_load_image_props   (XcfInfo       *info,
@@ -136,14 +139,14 @@ xcf_load_image (Gimp     *gimp,
                 XcfInfo  *info,
                 GError  **error)
 {
-  GimpImage          *image;
+  GimpImage          *image = NULL;
   const GimpParasite *parasite;
   guint32             saved_pos;
   guint32             offset;
   gint                width;
   gint                height;
   gint                image_type;
-  gint                precision = GIMP_PRECISION_U8;
+  GimpPrecision       precision = GIMP_PRECISION_U8_GAMMA;
   gint                num_successful_elements = 0;
 
   /* read in the image width, height and type */
@@ -152,7 +155,29 @@ xcf_load_image (Gimp     *gimp,
   info->cp += xcf_read_int32 (info->fp, (guint32 *) &image_type, 1);
 
   if (info->file_version >= 4)
-    info->cp += xcf_read_int32 (info->fp, (guint32 *) &precision, 1);
+    {
+      gint p;
+
+      info->cp += xcf_read_int32 (info->fp, (guint32 *) &p, 1);
+
+      if (info->file_version == 4)
+        {
+          switch (p)
+            {
+            case 0: precision = GIMP_PRECISION_U8_GAMMA;     break;
+            case 1: precision = GIMP_PRECISION_U16_GAMMA;    break;
+            case 2: precision = GIMP_PRECISION_U32_LINEAR;   break;
+            case 3: precision = GIMP_PRECISION_HALF_LINEAR;  break;
+            case 4: precision = GIMP_PRECISION_FLOAT_LINEAR; break;
+            default:
+              goto hard_error;
+            }
+        }
+      else
+        {
+          precision = p;
+        }
+    }
 
   image = gimp_create_image (gimp, width, height, image_type, precision,
                              FALSE);
@@ -355,7 +380,8 @@ xcf_load_image (Gimp     *gimp,
 		       _("This XCF file is corrupt!  I could not even "
 			 "salvage any partial image data from it."));
 
-  g_object_unref (image);
+  if (image)
+    g_object_unref (image);
 
   return NULL;
 }
@@ -462,9 +488,9 @@ xcf_load_image_props (XcfInfo   *info,
                 info->cp += xcf_read_int8 (info->fp, cmap, n_colors * 3);
               }
 
-            /* only set color map if image is not indexed, this is
-             * just sanity checking to make sure gimp doesn't end up
-             * with an image state that is impossible.
+            /* only set color map if image is indexed, this is just
+             * sanity checking to make sure gimp doesn't end up with
+             * an image state that is impossible.
              */
             if (gimp_image_get_base_type (image) == GIMP_INDEXED)
               gimp_image_set_colormap (image, cmap, n_colors, FALSE);
@@ -585,12 +611,15 @@ xcf_load_image_props (XcfInfo   *info,
 
         case PROP_PARASITES:
           {
-            glong         base = info->cp;
-            GimpParasite *p;
+            glong base = info->cp;
 
             while (info->cp - base < prop_size)
               {
-                p = xcf_load_parasite (info);
+                GimpParasite *p = xcf_load_parasite (info);
+
+                if (! p)
+                  return FALSE;
+
                 gimp_image_parasite_attach (image, p);
                 gimp_parasite_free (p);
               }
@@ -799,6 +828,18 @@ xcf_load_layer_props (XcfInfo    *info,
           }
           break;
 
+        case PROP_LOCK_POSITION:
+          {
+            gboolean lock_position;
+
+            info->cp += xcf_read_int32 (info->fp, (guint32 *) &lock_position, 1);
+
+            if (gimp_item_can_lock_position (GIMP_ITEM (*layer)))
+              gimp_item_set_lock_position (GIMP_ITEM (*layer),
+                                           lock_position, FALSE);
+          }
+          break;
+
         case PROP_APPLY_MASK:
           info->cp += xcf_read_int32 (info->fp, (guint32 *) apply_mask, 1);
           break;
@@ -843,12 +884,15 @@ xcf_load_layer_props (XcfInfo    *info,
 
         case PROP_PARASITES:
           {
-            glong         base = info->cp;
-            GimpParasite *p;
+            glong base = info->cp;
 
             while (info->cp - base < prop_size)
               {
-                p = xcf_load_parasite (info);
+                GimpParasite *p = xcf_load_parasite (info);
+
+                if (! p)
+                  return FALSE;
+
                 gimp_item_parasite_attach (GIMP_ITEM (*layer), p, FALSE);
                 gimp_parasite_free (p);
               }
@@ -997,6 +1041,16 @@ xcf_load_channel_props (XcfInfo      *info,
           }
           break;
 
+        case PROP_LOCK_POSITION:
+          {
+            gboolean lock_position;
+
+            info->cp += xcf_read_int32 (info->fp, (guint32 *) &lock_position, 1);
+            gimp_item_set_lock_position (GIMP_ITEM (*channel),
+                                         lock_position ? TRUE : FALSE, FALSE);
+          }
+          break;
+
         case PROP_SHOW_MASKED:
           {
             gboolean show_masked;
@@ -1026,12 +1080,15 @@ xcf_load_channel_props (XcfInfo      *info,
 
         case PROP_PARASITES:
           {
-            glong         base = info->cp;
-            GimpParasite *p;
+            glong base = info->cp;
 
             while ((info->cp - base) < prop_size)
               {
-                p = xcf_load_parasite (info);
+                GimpParasite *p = xcf_load_parasite (info);
+
+                if (! p)
+                  return FALSE;
+
                 gimp_item_parasite_attach (GIMP_ITEM (*channel), p, FALSE);
                 gimp_parasite_free (p);
               }
@@ -1434,6 +1491,7 @@ xcf_load_level (XcfInfo    *info,
                 GeglBuffer *buffer)
 {
   const Babl *format;
+  gint        bpp;
   guint32     saved_pos;
   guint32     offset, offset2;
   gint        n_tile_rows;
@@ -1445,6 +1503,7 @@ xcf_load_level (XcfInfo    *info,
   gint        fail;
 
   format = gegl_buffer_get_format (buffer);
+  bpp    = babl_format_get_bytes_per_pixel (format);
 
   info->cp += xcf_read_int32 (info->fp, (guint32 *) &width, 1);
   info->cp += xcf_read_int32 (info->fp, (guint32 *) &height, 1);
@@ -1491,7 +1550,7 @@ xcf_load_level (XcfInfo    *info,
       /* if the offset is 0 then we need to read in the maximum possible
          allowing for negative compression */
       if (offset2 == 0)
-        offset2 = offset + XCF_TILE_WIDTH * XCF_TILE_WIDTH * 4 * 1.5;
+        offset2 = offset + XCF_TILE_WIDTH * XCF_TILE_WIDTH * bpp * 1.5;
                                         /* 1.5 is probably more
                                            than we need to allow */
 
@@ -1714,6 +1773,14 @@ xcf_load_parasite (XcfInfo *info)
   info->cp += xcf_read_string (info->fp, &name, 1);
   info->cp += xcf_read_int32  (info->fp, &flags, 1);
   info->cp += xcf_read_int32  (info->fp, &size, 1);
+
+  if (size > MAX_XCF_PARASITE_DATA_LEN)
+    {
+      g_warning ("Maximum parasite data length (%ld bytes) exceeded. "
+                 "Possibly corrupt XCF file.", MAX_XCF_PARASITE_DATA_LEN);
+      g_free (name);
+      return NULL;
+    }
 
   data = g_new (gchar, size);
   info->cp += xcf_read_int8 (info->fp, data, size);

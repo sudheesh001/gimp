@@ -94,12 +94,15 @@ static void     gimp_file_dialog_add_preview            (GimpFileDialog   *dialo
                                                          Gimp             *gimp);
 static void     gimp_file_dialog_add_filters            (GimpFileDialog   *dialog,
                                                          Gimp             *gimp,
+                                                         GimpFileChooserAction
+                                                                           action,
                                                          GSList           *file_procs,
                                                          GSList           *file_procs_all_images);
 static void     gimp_file_dialog_process_procedure      (GimpPlugInProcedure
                                                                           *file_proc,
-                                                         GtkFileFilter    **filter_out,
-                                                         GtkFileFilter    *all);
+                                                         GtkFileFilter   **filter_out,
+                                                         GtkFileFilter    *all,
+                                                         GtkFileFilter    *all_savable);
 static void     gimp_file_dialog_add_proc_selection     (GimpFileDialog   *dialog,
                                                          Gimp             *gimp,
                                                          GSList           *file_procs,
@@ -120,7 +123,7 @@ static void     gimp_file_dialog_help_clicked           (GtkWidget        *widge
                                                          gpointer          dialog);
 
 static gchar  * gimp_file_dialog_pattern_from_extension (const gchar   *extension);
-static gchar  * gimp_file_dialog_get_documents_uri      (void);
+static gchar  * gimp_file_dialog_get_default_uri        (Gimp          *gimp);
 static gchar  * gimp_file_dialog_get_dirname_from_uri   (const gchar   *uri);
 
 
@@ -402,8 +405,7 @@ gimp_file_dialog_new (Gimp                  *gimp,
 
   gimp_file_dialog_add_preview (dialog, gimp);
 
-  gimp_file_dialog_add_filters (dialog,
-                                gimp,
+  gimp_file_dialog_add_filters (dialog, gimp, action,
                                 file_procs,
                                 file_procs_all_images);
 
@@ -484,24 +486,26 @@ gimp_file_dialog_set_save_image (GimpFileDialog *dialog,
                                  GimpImage      *image,
                                  gboolean        save_a_copy,
                                  gboolean        export,
-                                 gboolean        close_after_saving)
+                                 gboolean        close_after_saving,
+                                 GimpObject     *display)
 {
-  const gchar *dir_uri  = NULL;
-  const gchar *name_uri = NULL;
-  const gchar *ext_uri  = NULL;
-  gchar       *docs_uri = NULL;
-  gchar       *dirname  = NULL;
-  gchar       *basename = NULL;
+  const gchar *dir_uri     = NULL;
+  const gchar *name_uri    = NULL;
+  const gchar *ext_uri     = NULL;
+  gchar       *default_uri = NULL;
+  gchar       *dirname     = NULL;
+  gchar       *basename    = NULL;
 
   g_return_if_fail (GIMP_IS_FILE_DIALOG (dialog));
   g_return_if_fail (GIMP_IS_IMAGE (image));
 
-  docs_uri = gimp_file_dialog_get_documents_uri ();
+  default_uri = gimp_file_dialog_get_default_uri (gimp);
 
   dialog->image              = image;
   dialog->save_a_copy        = save_a_copy;
   dialog->export             = export;
   dialog->close_after_saving = close_after_saving;
+  dialog->display_to_close   = display;
 
   gimp_file_dialog_set_file_proc (dialog, NULL);
 
@@ -515,7 +519,7 @@ gimp_file_dialog_set_save_image (GimpFileDialog *dialog,
        *   3. Path of source XCF
        *   4. Path of Import source
        *   5. Last Save path of any GIMP document
-       *   6. The OS 'Documents' path
+       *   6. The default path (usually the OS 'Documents' path)
        */
 
       if (save_a_copy)
@@ -536,7 +540,7 @@ gimp_file_dialog_set_save_image (GimpFileDialog *dialog,
                                      GIMP_FILE_SAVE_LAST_URI_KEY);
 
       if (! dir_uri)
-        dir_uri = docs_uri;
+        dir_uri = default_uri;
 
 
       /* Priority of default basenames for Save:
@@ -584,7 +588,7 @@ gimp_file_dialog_set_save_image (GimpFileDialog *dialog,
        *   3. Path of XCF source
        *   4. Last path of any save to XCF
        *   5. Last Export path of any document
-       *   6. The OS 'Documents' path
+       *   6. The default path (usually the OS 'Documents' path)
        */
 
       dir_uri = gimp_image_get_exported_uri (image);
@@ -608,7 +612,7 @@ gimp_file_dialog_set_save_image (GimpFileDialog *dialog,
                                      GIMP_FILE_EXPORT_LAST_URI_KEY);
 
       if (! dir_uri)
-        dir_uri = docs_uri;
+        dir_uri = default_uri;
 
 
       /* Priority of default basenames for Export:
@@ -634,17 +638,18 @@ gimp_file_dialog_set_save_image (GimpFileDialog *dialog,
       /* Priority of default type/extension for Export:
        *
        *   1. Type of last Export
-       *   2. Type of latest Export of any document
-       *   3. Type of the image Import
+       *   2. Type of the image Import
+       *   3. Type of latest Export of any document
        *   4. .png
        */
       ext_uri = gimp_image_get_exported_uri (image);
 
       if (! ext_uri)
+        ext_uri = gimp_image_get_imported_uri (image);
+
+      if (! ext_uri)
         ext_uri = g_object_get_data (G_OBJECT (gimp),
                                      GIMP_FILE_EXPORT_LAST_URI_KEY);
-      if (! ext_uri)
-        ext_uri = gimp_image_get_imported_uri (image);
 
       if (! ext_uri)
         ext_uri = "file:///we/only/care/about/extension.png";
@@ -667,7 +672,7 @@ gimp_file_dialog_set_save_image (GimpFileDialog *dialog,
   gtk_file_chooser_set_current_folder_uri (GTK_FILE_CHOOSER (dialog), dirname);
   gtk_file_chooser_set_current_name (GTK_FILE_CHOOSER (dialog), basename);
 
-  g_free (docs_uri);
+  g_free (default_uri);
   g_free (basename);
   g_free (dirname);
 }
@@ -774,19 +779,22 @@ gimp_file_dialog_add_preview (GimpFileDialog *dialog,
  * gimp_file_dialog_add_filters:
  * @dialog:
  * @gimp:
+ * @action:
  * @file_procs:            The image types that can be chosen from
- *                         the drop down
+ *                         the file type list
  * @file_procs_all_images: The additional images types shown when
  *                         "All images" is selected
  *
  **/
 static void
-gimp_file_dialog_add_filters (GimpFileDialog *dialog,
-                              Gimp           *gimp,
-                              GSList         *file_procs,
-                              GSList         *file_procs_all_images)
+gimp_file_dialog_add_filters (GimpFileDialog        *dialog,
+                              Gimp                  *gimp,
+                              GimpFileChooserAction  action,
+                              GSList                *file_procs,
+                              GSList                *file_procs_all_images)
 {
   GtkFileFilter *all;
+  GtkFileFilter *all_savable = NULL;
   GSList        *list;
 
   all = gtk_file_filter_new ();
@@ -798,6 +806,16 @@ gimp_file_dialog_add_filters (GimpFileDialog *dialog,
   gtk_file_filter_set_name (all, _("All images"));
   gtk_file_chooser_add_filter (GTK_FILE_CHOOSER (dialog), all);
 
+  if (file_procs_all_images)
+    {
+      all_savable = gtk_file_filter_new ();
+      if (action == GIMP_FILE_CHOOSER_ACTION_SAVE)
+        gtk_file_filter_set_name (all_savable, _("All XCF images"));
+      else
+        gtk_file_filter_set_name (all_savable, _("All export images"));
+      gtk_file_chooser_add_filter (GTK_FILE_CHOOSER (dialog), all_savable);
+    }
+
   /* Add the normal file procs */
   for (list = file_procs; list; list = g_slist_next (list))
     {
@@ -806,7 +824,7 @@ gimp_file_dialog_add_filters (GimpFileDialog *dialog,
 
       gimp_file_dialog_process_procedure (file_proc,
                                           &filter,
-                                          all);
+                                          all, all_savable);
       if (filter)
         {
           gtk_file_chooser_add_filter (GTK_FILE_CHOOSER (dialog),
@@ -824,10 +842,13 @@ gimp_file_dialog_add_filters (GimpFileDialog *dialog,
 
       gimp_file_dialog_process_procedure (file_proc,
                                           NULL,
-                                          all);
+                                          all, NULL);
     }
 
-  gtk_file_chooser_set_filter (GTK_FILE_CHOOSER (dialog), all);
+  if (all_savable)
+    gtk_file_chooser_set_filter (GTK_FILE_CHOOSER (dialog), all_savable);
+  else
+    gtk_file_chooser_set_filter (GTK_FILE_CHOOSER (dialog), all);
 }
 
 
@@ -836,6 +857,7 @@ gimp_file_dialog_add_filters (GimpFileDialog *dialog,
  * @file_proc:
  * @filter_out:
  * @all:
+ * @all_savable:
  *
  * Creates a #GtkFileFilter of @file_proc and adds the extensions to
  * the @all filter. The returned #GtkFileFilter has a normal ref and
@@ -844,7 +866,8 @@ gimp_file_dialog_add_filters (GimpFileDialog *dialog,
 static void
 gimp_file_dialog_process_procedure (GimpPlugInProcedure  *file_proc,
                                     GtkFileFilter       **filter_out,
-                                    GtkFileFilter        *all)
+                                    GtkFileFilter        *all,
+                                    GtkFileFilter        *all_savable)
 {
   GtkFileFilter *filter = NULL;
   GString       *str    = NULL;
@@ -872,6 +895,8 @@ gimp_file_dialog_process_procedure (GimpPlugInProcedure  *file_proc,
       pattern = gimp_file_dialog_pattern_from_extension (extension);
       gtk_file_filter_add_pattern (filter, pattern);
       gtk_file_filter_add_pattern (all, pattern);
+      if (all_savable)
+        gtk_file_filter_add_pattern (all_savable, pattern);
       g_free (pattern);
 
       if (i == 0)
@@ -1118,20 +1143,27 @@ gimp_file_dialog_pattern_from_extension (const gchar *extension)
 }
 
 static gchar *
-gimp_file_dialog_get_documents_uri (void)
+gimp_file_dialog_get_default_uri (Gimp *gimp)
 {
-  gchar *path;
-  gchar *uri;
+  if (gimp->default_folder)
+    {
+      return g_strdup (gimp->default_folder);
+    }
+  else
+    {
+      gchar *path;
+      gchar *uri;
 
-  /* Make sure it ends in '/' */
-  path = g_build_path ("/",
-                       g_get_user_special_dir (G_USER_DIRECTORY_DOCUMENTS),
-                       "/",
-                       NULL);
-  uri = g_filename_to_uri (path, NULL, NULL);
-  g_free (path);
+      /* Make sure it ends in '/' */
+      path = g_build_path (G_DIR_SEPARATOR_S,
+                           g_get_user_special_dir (G_USER_DIRECTORY_DOCUMENTS),
+                           G_DIR_SEPARATOR_S,
+                           NULL);
+      uri = g_filename_to_uri (path, NULL, NULL);
+      g_free (path);
 
-  return uri;
+      return uri;
+    }
 }
 
 static gchar *
@@ -1152,7 +1184,7 @@ gimp_file_dialog_get_dirname_from_uri (const gchar *uri)
    * assertion failure in gtk+. This scenario occurs if we have opened
    * an image from the root of a drive and then do Save As.
    *
-   * Of course, gtk+ shouldn't assert even if we feed it slighly bogus
+   * Of course, gtk+ shouldn't assert even if we feed it slightly bogus
    * data, and that problem should be fixed, too. But to get the
    * correct default current folder in the filechooser combo box, we
    * need to pass it the proper URI for an absolute path anyway. So

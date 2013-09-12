@@ -27,14 +27,14 @@
 
 #include "core-types.h"
 
+#include "gegl/gimpapplicator.h"
 #include "gegl/gimp-babl-compat.h"
-#include "gegl/gimp-gegl-nodes.h"
+#include "gegl/gimp-gegl-apply-operation.h"
 #include "gegl/gimp-gegl-utils.h"
 
 #include "vectors/gimpvectors.h"
 
 #include "gimp.h"
-#include "gimp-apply-operation.h"
 #include "gimpcontext.h"
 #include "gimperror.h"
 #include "gimpgrouplayer.h"
@@ -49,6 +49,7 @@
 #include "gimpundostack.h"
 
 #include "gimp-intl.h"
+
 
 static GimpLayer * gimp_image_merge_layers (GimpImage     *image,
                                             GimpContainer *container,
@@ -160,8 +161,9 @@ gimp_image_merge_visible_layers (GimpImage     *image,
 }
 
 GimpLayer *
-gimp_image_flatten (GimpImage   *image,
-                    GimpContext *context)
+gimp_image_flatten (GimpImage    *image,
+                    GimpContext  *context,
+                    GError      **error)
 {
   GList     *list;
   GSList    *merge_list = NULL;
@@ -169,16 +171,7 @@ gimp_image_flatten (GimpImage   *image,
 
   g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
   g_return_val_if_fail (GIMP_IS_CONTEXT (context), NULL);
-
-  gimp_set_busy (image->gimp);
-
-  gimp_image_undo_group_start (image,
-                               GIMP_UNDO_GROUP_IMAGE_LAYERS_MERGE,
-                               C_("undo-type", "Flatten Image"));
-
-  /* if there's a floating selection, anchor it */
-  if (gimp_image_get_floating_selection (image))
-    floating_sel_anchor (gimp_image_get_floating_selection (image));
+  g_return_val_if_fail (error == NULL || *error == NULL, NULL);
 
   for (list = gimp_image_get_layer_iter (image);
        list;
@@ -186,23 +179,43 @@ gimp_image_flatten (GimpImage   *image,
     {
       layer = list->data;
 
+      if (gimp_layer_is_floating_sel (layer))
+        continue;
+
       if (gimp_item_get_visible (GIMP_ITEM (layer)))
         merge_list = g_slist_append (merge_list, layer);
     }
 
-  layer = gimp_image_merge_layers (image,
-                                   gimp_image_get_layers (image),
-                                   merge_list, context,
-                                   GIMP_FLATTEN_IMAGE);
-  g_slist_free (merge_list);
+  if (merge_list)
+    {
+      gimp_set_busy (image->gimp);
 
-  gimp_image_alpha_changed (image);
+      gimp_image_undo_group_start (image,
+                                   GIMP_UNDO_GROUP_IMAGE_LAYERS_MERGE,
+                                   C_("undo-type", "Flatten Image"));
 
-  gimp_image_undo_group_end (image);
+      /* if there's a floating selection, anchor it */
+      if (gimp_image_get_floating_selection (image))
+        floating_sel_anchor (gimp_image_get_floating_selection (image));
 
-  gimp_unset_busy (image->gimp);
+      layer = gimp_image_merge_layers (image,
+                                       gimp_image_get_layers (image),
+                                       merge_list, context,
+                                       GIMP_FLATTEN_IMAGE);
+      g_slist_free (merge_list);
 
-  return layer;
+      gimp_image_alpha_changed (image);
+
+      gimp_image_undo_group_end (image);
+
+      gimp_unset_busy (image->gimp);
+
+      return layer;
+    }
+
+  g_set_error_literal (error, GIMP_ERROR, GIMP_FAILED,
+                       _("Cannot flatten an image without any visible layer."));
+  return NULL;
 }
 
 GimpLayer *
@@ -581,8 +594,7 @@ gimp_image_merge_layers (GimpImage     *image,
     {
       GeglBuffer           *merge_buffer;
       GeglBuffer           *layer_buffer;
-      GeglBuffer           *mask_buffer = NULL;
-      GeglNode             *apply;
+      GimpApplicator       *applicator;
       GimpLayerModeEffects  mode;
 
       layer = layers->data;
@@ -600,32 +612,41 @@ gimp_image_merge_layers (GimpImage     *image,
       merge_buffer = gimp_drawable_get_buffer (GIMP_DRAWABLE (merge_layer));
       layer_buffer = gimp_drawable_get_buffer (GIMP_DRAWABLE (layer));
 
+      applicator =
+        gimp_applicator_new (NULL,
+                             gimp_drawable_get_linear (GIMP_DRAWABLE (layer)));
+
       if (gimp_layer_get_mask (layer) &&
           gimp_layer_get_apply_mask (layer))
         {
+          GeglBuffer *mask_buffer;
+
           mask_buffer = gimp_drawable_get_buffer (GIMP_DRAWABLE (layer->mask));
+
+          gimp_applicator_set_mask_buffer (applicator, mask_buffer);
+          gimp_applicator_set_mask_offset (applicator,
+                                           - (x1 - off_x),
+                                           - (y1 - off_y));
         }
 
-      apply =
-        gimp_gegl_create_apply_buffer_node (layer_buffer,
-                                            - (x1 - off_x),
-                                            - (y1 - off_y),
-                                            0,
-                                            0,
-                                            0,
-                                            0,
-                                            mask_buffer,
-                                            - (x1 - off_x),
-                                            - (y1 - off_y),
-                                            gimp_layer_get_opacity (layer),
-                                            mode,
-                                            GIMP_COMPONENT_ALL);
+      gimp_applicator_set_src_buffer (applicator, merge_buffer);
+      gimp_applicator_set_dest_buffer (applicator, merge_buffer);
 
-      gimp_apply_operation (merge_buffer, NULL, NULL,
-                            apply,
-                            merge_buffer, NULL);
+      gimp_applicator_set_apply_buffer (applicator, layer_buffer);
+      gimp_applicator_set_apply_offset (applicator,
+                                        - (x1 - off_x),
+                                        - (y1 - off_y));
 
-      g_object_unref (apply);
+      gimp_applicator_set_mode (applicator,
+                                gimp_layer_get_opacity (layer),
+                                mode);
+
+      gimp_applicator_blit (applicator,
+                            GEGL_RECTANGLE (0, 0,
+                                            gegl_buffer_get_width  (merge_buffer),
+                                            gegl_buffer_get_height (merge_buffer)));
+
+      g_object_unref (applicator);
 
       gimp_image_remove_layer (image, layer, TRUE, NULL);
     }

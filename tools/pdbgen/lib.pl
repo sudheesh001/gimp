@@ -83,7 +83,7 @@ sub generate {
 
 	my $funcname = "gimp_$name"; my $wrapped = "";
 	my %usednames;
-	my $retdesc = "";
+	my $retdesc = "Returns: ";
 
 	if ($proc->{deprecated}) {
 	    if ($proc->{deprecated} eq 'NONE') {
@@ -120,7 +120,11 @@ sub generate {
 
 	    $retarg->{retval} = 1;
 
-	    $retdesc = exists $retarg->{desc} ? $retarg->{desc} : "";
+	    $retdesc .= exists $retarg->{desc} ? $retarg->{desc} : "";
+
+	    if ($retarg->{type} eq 'stringarray') {
+		$retdesc .= ". The returned value must be freed with g_strfreev().";
+	    }
 	}
 	else {
 	    # No return values
@@ -168,7 +172,7 @@ sub generate {
 	# return success/failure boolean if we don't have anything else
 	if ($rettype eq 'void') {
 	    $return_args .= "\n" . ' ' x 2 . "gboolean success = TRUE;";
-	    $retdesc = "TRUE on success.";
+	    $retdesc .= "TRUE on success.";
 	}
 
 	# We only need to bother with this if we have to return a value
@@ -265,7 +269,10 @@ CODE
 		my $arg = $arg_types{$type};
 		my $var;
 	    
-		my $ch = ""; my $cf = "";
+		my $ch = ""; my $cf = ""; my $numvarplus = "";
+		if ($type =~ /stringarray/) {
+		    $numvarplus = ' + 1';
+		}
 		if ($type =~ /^string(array)?/) {
 		    $ch = 'g_strdup (';
 		    $cf = ')';
@@ -312,7 +319,7 @@ CODE
 
 		    $return_marshal .= <<NEW . (($ch || $cf) ? <<CP1 : <<CP2);
       $numvar = return_vals[$numpos].data.d_$numtype;
-      $var = g_new ($datatype, $numvar);
+      $var = g_new ($datatype, $numvar$numvarplus);
 NEW
       for (i = 0; i < $numvar; i++)
         $dh$_->{name}$df\[i] = ${ch}return_vals[$argc].data.d_$type\[i]${cf};
@@ -321,6 +328,11 @@ CP1
               return_vals[$argc].data.d_$type,
               $numvar * sizeof ($datatype));
 CP2
+                    if ($type =~ /stringarray/) {
+			$return_marshal .= <<FINISH
+      $dh$_->{name}$df\[i] = NULL;
+FINISH
+		    }
 		    $out->{headers} = "#include <string.h>\n" unless ($ch || $cf);
                 }
 		else {
@@ -452,6 +464,8 @@ CODE
 			&desc_wrap($proc->{help});
 	}
 
+	$retdesc = &desc_wrap($retdesc);
+
 	$out->{code} .= <<CODE;
 
 /**
@@ -459,7 +473,7 @@ CODE
 $argdesc *
 $procdesc
  *
- * Returns: $retdesc$sincedesc
+$retdesc$sincedesc
  **/
 $rettype
 $wrapped$funcname ($clist)

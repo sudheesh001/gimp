@@ -98,8 +98,7 @@ gimp_brush_clipboard_constructed (GObject *object)
 {
   GimpBrushClipboard *brush = GIMP_BRUSH_CLIPBOARD (object);
 
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   g_assert (GIMP_IS_GIMP (brush->gimp));
 
@@ -197,8 +196,8 @@ gimp_brush_clipboard_buffer_changed (Gimp      *gimp,
       const Babl *format = gegl_buffer_get_format (buffer);
       GeglBuffer *dest_buffer;
 
-      width  = MIN (gimp_buffer_get_width  (gimp->global_buffer), 512);
-      height = MIN (gimp_buffer_get_height (gimp->global_buffer), 512);
+      width  = MIN (gimp_buffer_get_width  (gimp->global_buffer), 1024);
+      height = MIN (gimp_buffer_get_height (gimp->global_buffer), 1024);
 
       brush->mask   = gimp_temp_buf_new (width, height,
                                          babl_format ("Y u8"));

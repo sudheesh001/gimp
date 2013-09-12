@@ -485,7 +485,7 @@ typedef struct {
    char       Reserved[512]; /**/
 } TW_FILESYSTEM, FAR * pTW_FILESYSTEM;
 
-/* DAT_PASSTHRU, device dependant data to pass through Data Source */
+/* DAT_PASSTHRU, device dependent data to pass through Data Source */
 typedef struct {
    TW_MEMREF  pCommand;        /* Pointer to Command buffer */
    TW_UINT32  CommandBytes;    /* Number of bytes in Command buffer */
@@ -1639,7 +1639,7 @@ typedef struct {
 #define TWCC_BADDEST						12 /* Unknown destination Application/Source in DSM_Entry */
 #define TWCC_CAPUNSUPPORTED			13 /* Capability not supported by source            */
 #define TWCC_CAPBADOPERATION		14 /* Operation not supported by capability         */
-#define TWCC_CAPSEQERROR				15 /* Capability has dependancy on other capability */
+#define TWCC_CAPSEQERROR				15 /* Capability has dependency on other capability */
 /* Added 1.8 */
 #define TWCC_DENIED							16 /* File System operation is denied (file is protected) */
 #define TWCC_FILEEXISTS					17 /* Operation failed because file already exists. */

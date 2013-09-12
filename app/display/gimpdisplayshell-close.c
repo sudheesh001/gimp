@@ -300,9 +300,16 @@ gimp_display_shell_close_time_changed (GimpMessageBox *box)
     }
 
   if (! gimp_image_is_export_dirty (image))
-    export_text =
-      g_strdup_printf (_("The image has been exported to '%s'."),
-                       gimp_image_get_exported_uri (image));
+    {
+      const gchar *exported_uri = gimp_image_get_exported_uri (image);
+
+      if (! exported_uri)
+        exported_uri = gimp_image_get_imported_uri (image);
+
+      export_text =
+        g_strdup_printf (_("The image has been exported to '%s'."),
+                         exported_uri);
+    }
 
   if (time_text && export_text)
     gimp_message_box_set_text (box, "%s\n\n%s", time_text, export_text);
@@ -338,7 +345,7 @@ gimp_display_shell_close_response (GtkWidget        *widget,
           {
             GimpUIManager *manager = gimp_image_window_get_ui_manager (window);
 
-            /* FIXME image window: set this display active */
+            gimp_image_window_set_active_shell (window, shell);
 
             gimp_ui_manager_activate_action (manager,
                                              "file", "file-save-and-close");

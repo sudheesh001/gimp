@@ -44,23 +44,9 @@
 #define PLUG_IN_ROLE   "gimp-file-gif-save"
 
 
-/* Define only one of these to determine which kind of gif's you would like.
- * GIF_UN means use uncompressed gifs.  These will be large, but no
- * patent problems.
- * GIF_RLE uses Run-length-encoding, which should not be covered by the
- * patent, but this is not legal advice.
- */
-/* #define GIF_UN */
-/* #define GIF_RLE */
-
 /* uncomment the line below for a little debugging info */
 /* #define GIFDEBUG yesplease */
 
-/* Does the version of GIMP we're compiling for support
-   data attachments to images?  ('Parasites') */
-#define FACEHUGGERS aieee
-/* PS: I know that technically facehuggers aren't parasites,
-   the pupal-forms are.  But facehuggers are ky00te. */
 
 enum
 {
@@ -104,7 +90,7 @@ static gboolean  save_image            (const gchar      *filename,
                                         GError          **error);
 
 static GimpPDBStatusType sanity_check  (const gchar      *filename,
-                                        gint32            image_ID,
+                                        gint32           *image_ID,
                                         GError          **error);
 static gboolean bad_bounds_dialog      (void);
 
@@ -112,15 +98,11 @@ static gboolean save_dialog            (gint32            image_ID);
 static void     comment_entry_callback (GtkTextBuffer    *buffer);
 
 
-static gboolean comment_was_edited = FALSE;
-
-static GimpRunMode run_mode;
-#ifdef FACEHUGGERS
-static GimpParasite * comment_parasite = NULL;
-#endif
-
-/* For compression code */
-static gint Interlace;
+static GimpRunMode   run_mode;
+static GimpParasite *comment_parasite   = NULL;
+static gboolean      comment_was_edited = FALSE;
+static gchar        *globalcomment      = NULL;
+static gint          Interlace; /* For compression code */
 
 
 const GimpPlugInInfo PLUG_IN_INFO =
@@ -196,9 +178,10 @@ run (const gchar      *name,
   GimpExportReturn  export = GIMP_EXPORT_CANCEL;
   GError           *error  = NULL;
 
-  run_mode = param[0].data.d_int32;
-
   INIT_I18N ();
+  gegl_init (NULL, NULL);
+
+  run_mode = param[0].data.d_int32;
 
   *nreturn_vals = 1;
   *return_vals  = values;
@@ -209,7 +192,7 @@ run (const gchar      *name,
   if (strcmp (name, SAVE_PROC) == 0)
     {
       const gchar *filename;
-      gint32       image_ID;
+      gint32       image_ID, sanitized_image_ID = 0;
       gint32       drawable_ID;
       gint32       orig_image_ID;
 
@@ -221,11 +204,15 @@ run (const gchar      *name,
           run_mode == GIMP_RUN_WITH_LAST_VALS)
         gimp_ui_init (PLUG_IN_BINARY, FALSE);
 
-      status = sanity_check (filename, image_ID, &error);
+      status = sanity_check (filename, &image_ID, &error);
 
       /* Get the export options */
       if (status == GIMP_PDB_SUCCESS)
         {
+          /* If the sanity check succeeded, the image_ID will point to
+           * a duplicate image to delete later. */
+          sanitized_image_ID = image_ID;
+
           switch (run_mode)
             {
             case GIMP_RUN_INTERACTIVE:
@@ -283,6 +270,8 @@ run (const gchar      *name,
             if (export == GIMP_EXPORT_CANCEL)
               {
                 values[0].data.d_status = GIMP_PDB_CANCEL;
+                if (sanitized_image_ID)
+                  gimp_image_delete (sanitized_image_ID);
                 return;
               }
           }
@@ -305,6 +294,8 @@ run (const gchar      *name,
             {
               status = GIMP_PDB_EXECUTION_ERROR;
             }
+
+          gimp_image_delete (sanitized_image_ID);
         }
 
       if (export == GIMP_EXPORT_EXPORT)
@@ -320,9 +311,6 @@ run (const gchar      *name,
 
   values[0].data.d_status = status;
 }
-
-static gchar * globalcomment = NULL;
-
 
 
 /* ppmtogif.c - read a portable pixmap and produce a GIF file
@@ -354,21 +342,8 @@ static gchar * globalcomment = NULL;
  */
 typedef int (*ifunptr) (int, int);
 
-/*
- * a code_int must be able to hold 2**BITS values of type int, and also -1
- */
-typedef int code_int;
 
-#ifdef SIGNED_COMPARE_SLOW
-typedef unsigned long int count_int;
-typedef unsigned short int count_short;
-#else /*SIGNED_COMPARE_SLOW */
-typedef long int count_int;
-#endif /*SIGNED_COMPARE_SLOW */
-
-
-
-static gint find_unused_ia_colour   (const guchar *pixels,
+static gint find_unused_ia_color   (const guchar *pixels,
                                      gint          numpixels,
                                      gint          num_indices,
                                      gint         *colors);
@@ -376,11 +351,11 @@ static gint find_unused_ia_colour   (const guchar *pixels,
 static void special_flatten_indexed_alpha (guchar *pixels,
                                            gint    transparent,
                                            gint    numpixels);
-static int colors_to_bpp  (int);
-static int bpp_to_colors  (int);
-static int get_pixel      (int, int);
-static int gif_next_pixel (ifunptr);
-static void bump_pixel    (void);
+static gint colors_to_bpp  (int);
+static gint bpp_to_colors  (int);
+static gint get_pixel      (int, int);
+static gint gif_next_pixel (ifunptr);
+static void bump_pixel     (void);
 
 static void gif_encode_header              (FILE *, gboolean, int, int, int, int,
                                             int *, int *, int *, ifunptr);
@@ -397,35 +372,36 @@ static guchar  *pixels;
 static gint     cur_progress;
 static gint     max_progress;
 
-#ifdef GIF_UN
-static void no_compress     (int, FILE *, ifunptr);
-#else
-#ifdef GIF_RLE
-static void rle_compress    (int, FILE *, ifunptr);
-#else
-static void normal_compress (int, FILE *, ifunptr);
-#endif
-#endif
-static void put_word   (int, FILE *);
-static void compress   (int, FILE *, ifunptr);
-static void output     (code_int);
-static void cl_block   (void);
-static void cl_hash    (count_int);
-static void write_err  (void);
-static void char_init  (void);
-static void char_out   (int);
-static void flush_char (void);
+static void compress        (int      init_bits,
+                             FILE    *outfile,
+                             ifunptr  ReadValue);
+static void no_compress     (int      init_bits,
+                             FILE    *outfile,
+                             ifunptr  ReadValue);
+static void rle_compress    (int      init_bits,
+                             FILE    *outfile,
+                             ifunptr  ReadValue);
+static void normal_compress (int      init_bits,
+                             FILE    *outfile,
+                             ifunptr  ReadValue);
 
+static void put_word        (int, FILE *);
+static void output          (gint);
+static void cl_block        (void);
+static void cl_hash         (glong);
+static void char_init       (void);
+static void char_out        (int);
+static void flush_char      (void);
 
 
 static gint
-find_unused_ia_colour (const guchar *pixels,
+find_unused_ia_color (const guchar *pixels,
                        gint          numpixels,
                        gint          num_indices,
                        gint         *colors)
 {
   gboolean ix_used[256];
-  gint i;
+  gint     i;
 
 #ifdef GIFDEBUG
   g_printerr ("GIF: fuiac: Image claims to use %d/%d indices - finding free "
@@ -446,21 +422,21 @@ find_unused_ia_colour (const guchar *pixels,
       if (! ix_used[i])
         {
 #ifdef GIFDEBUG
-          g_printerr ("GIF: Found unused colour index %d.\n", (int) i);
+          g_printerr ("GIF: Found unused color index %d.\n", (int) i);
 #endif
           return i;
         }
     }
 
-  /* Couldn't find an unused colour index within the number of
+  /* Couldn't find an unused color index within the number of
      bits per pixel we wanted.  Will have to increment the number
-     of colours in the image and assign a transparent pixel there. */
+     of colors in the image and assign a transparent pixel there. */
   if (*colors < 256)
     {
       (*colors)++;
 
       g_printerr ("GIF: 2nd pass "
-                  "- Increasing bounds and using colour index %d.\n",
+                  "- Increasing bounds and using color index %d.\n",
                   *colors - 1);
       return ((*colors) - 1);
     }
@@ -479,7 +455,7 @@ special_flatten_indexed_alpha (guchar *pixels,
   guint32 i;
 
   /* Each transparent pixel in the image is mapped to a uniform value for
-     encoding, if image already has <=255 colours */
+     encoding, if image already has <=255 colors */
 
   if (transparent == -1) /* tough, no indices left for the trans. index */
     {
@@ -506,11 +482,11 @@ special_flatten_indexed_alpha (guchar *pixels,
 static gint
 parse_ms_tag (const gchar *str)
 {
-  gint sum = 0;
+  gint sum    = 0;
   gint offset = 0;
   gint length;
 
-  length = strlen(str);
+  length = strlen (str);
 
 find_another_bra:
 
@@ -565,7 +541,7 @@ parse_disposal_tag (const gchar *str)
 
 static GimpPDBStatusType
 sanity_check (const gchar  *filename,
-              gint32        image_ID,
+              gint32       *image_ID,
               GError      **error)
 {
   gint32 *layers;
@@ -574,8 +550,8 @@ sanity_check (const gchar  *filename,
   gint    image_height;
   gint    i;
 
-  image_width  = gimp_image_width (image_ID);
-  image_height = gimp_image_height (image_ID);
+  image_width  = gimp_image_width (*image_ID);
+  image_height = gimp_image_height (*image_ID);
 
   if (image_width > G_MAXUSHORT || image_height > G_MAXUSHORT)
     {
@@ -591,7 +567,8 @@ sanity_check (const gchar  *filename,
   /*** Iterate through the layers to make sure they're all ***/
   /*** within the bounds of the image                      ***/
 
-  layers = gimp_image_get_layers (image_ID, &nlayers);
+  *image_ID = gimp_image_duplicate (*image_ID);
+  layers = gimp_image_get_layers (*image_ID, &nlayers);
 
   for (i = 0; i < nlayers; i++)
     {
@@ -614,11 +591,12 @@ sanity_check (const gchar  *filename,
            */
           if ((run_mode == GIMP_RUN_NONINTERACTIVE) || bad_bounds_dialog ())
             {
-              gimp_image_crop (image_ID, image_width, image_height, 0, 0);
+              gimp_image_crop (*image_ID, image_width, image_height, 0, 0);
               return GIMP_PDB_SUCCESS;
             }
           else
             {
+              gimp_image_delete (*image_ID);
               return GIMP_PDB_CANCEL;
             }
         }
@@ -637,37 +615,35 @@ save_image (const gchar *filename,
             gint32       orig_image_ID,
             GError     **error)
 {
-  GimpPixelRgn pixel_rgn;
-  GimpDrawable *drawable;
-  GimpImageType drawable_type;
-  FILE *outfile;
-  gint Red[MAXCOLORS];
-  gint Green[MAXCOLORS];
-  gint Blue[MAXCOLORS];
-  guchar *cmap;
-  guint rows, cols;
-  gint BitsPerPixel, liberalBPP = 0, useBPP = 0;
-  gint colors;
-  gint i;
-  gint transparent;
-  gint offset_x, offset_y;
+  GeglBuffer    *buffer;
+  GimpImageType  drawable_type;
+  const Babl    *format = NULL;
+  FILE          *outfile;
+  gint           Red[MAXCOLORS];
+  gint           Green[MAXCOLORS];
+  gint           Blue[MAXCOLORS];
+  guchar        *cmap;
+  guint          rows, cols;
+  gint           BitsPerPixel, liberalBPP = 0, useBPP = 0;
+  gint           colors;
+  gint           i;
+  gint           transparent;
+  gint           offset_x, offset_y;
 
-  gint32 *layers;
-  gint    nlayers;
+  gint32        *layers;
+  gint           nlayers;
 
-  gboolean is_gif89 = FALSE;
+  gboolean       is_gif89 = FALSE;
 
-  gint   Delay89;
-  gint   Disposal;
-  gchar *layer_name;
+  gint           Delay89;
+  gint           Disposal;
+  gchar         *layer_name;
 
-  GimpRGB background;
-  guchar  bgred, bggreen, bgblue;
-  guchar  bgindex = 0;
-  guint   best_error = 0xFFFFFFFF;
+  GimpRGB        background;
+  guchar         bgred, bggreen, bgblue;
+  guchar         bgindex = 0;
+  guint          best_error = 0xFFFFFFFF;
 
-
-#ifdef FACEHUGGERS
   /* Save the comment back to the ImageID, if appropriate */
   if (globalcomment != NULL && comment_was_edited)
     {
@@ -679,7 +655,6 @@ save_image (const gchar *filename,
       gimp_parasite_free (comment_parasite);
       comment_parasite = NULL;
     }
-#endif
 
   /* The GIF spec says 7bit ASCII for the comment block. */
   if (gsvals.save_comment && globalcomment)
@@ -747,6 +722,11 @@ save_image (const gchar *filename,
         {
           Red[i] = Green[i] = Blue[i] = i;
         }
+
+      if (drawable_type == GIMP_GRAYA_IMAGE)
+        format = babl_format ("Y'A u8");
+      else
+        format = babl_format ("Y' u8");
       break;
 
     default:
@@ -757,7 +737,7 @@ save_image (const gchar *filename,
 
 
   /* find earliest index in palette which is closest to the background
-     colour, and ATTEMPT to use that as the GIF's default background colour. */
+     color, and ATTEMPT to use that as the GIF's default background color. */
   for (i = 255; i >= 0; --i)
     {
       guint local_error = 0;
@@ -807,7 +787,7 @@ save_image (const gchar *filename,
 
       if (drawable_type == GIMP_INDEXEDA_IMAGE)
         {
-          g_printerr ("GIF: Too many colours?\n");
+          g_printerr ("GIF: Too many colors?\n");
         }
     }
 
@@ -839,39 +819,36 @@ save_image (const gchar *filename,
   for (i = nlayers - 1; i >= 0; i--, cur_progress = (nlayers - i) * rows)
     {
       drawable_type = gimp_drawable_type (layers[i]);
-      drawable = gimp_drawable_get (layers[i]);
+      buffer = gimp_drawable_get_buffer (layers[i]);
       gimp_drawable_offsets (layers[i], &offset_x, &offset_y);
-      cols = drawable->width;
-      rows = drawable->height;
-      rowstride = drawable->width;
+      cols = gimp_drawable_width (layers[i]);
+      rows = gimp_drawable_height (layers[i]);
+      rowstride = cols;
 
-      gimp_pixel_rgn_init (&pixel_rgn, drawable, 0, 0,
-                           drawable->width, drawable->height, FALSE, FALSE);
+      pixels = g_new (guchar, (cols * rows *
+                               (((drawable_type == GIMP_INDEXEDA_IMAGE) ||
+                                 (drawable_type == GIMP_GRAYA_IMAGE)) ? 2 : 1)));
 
-      pixels = g_new (guchar, (drawable->width * drawable->height
-                               * (((drawable_type == GIMP_INDEXEDA_IMAGE)
-                                   || (drawable_type == GIMP_GRAYA_IMAGE)) ? 2 : 1)));
-
-      gimp_pixel_rgn_get_rect (&pixel_rgn, pixels, 0, 0,
-                               drawable->width, drawable->height);
-
+      gegl_buffer_get (buffer, GEGL_RECTANGLE (0, 0, cols, rows), 1.0,
+                       format, pixels,
+                       GEGL_AUTO_ROWSTRIDE, GEGL_ABYSS_NONE);
 
       /* sort out whether we need to do transparency jiggery-pokery */
-      if ((drawable_type == GIMP_INDEXEDA_IMAGE)
-          || (drawable_type == GIMP_GRAYA_IMAGE))
+      if ((drawable_type == GIMP_INDEXEDA_IMAGE) ||
+          (drawable_type == GIMP_GRAYA_IMAGE))
         {
           /* Try to find an entry which isn't actually used in the
              image, for a transparency index. */
 
           transparent =
-            find_unused_ia_colour (pixels,
-                                   drawable->width * drawable->height,
+            find_unused_ia_color (pixels,
+                                   cols * rows,
                                    bpp_to_colors (colors_to_bpp (colors)),
                                    &colors);
 
           special_flatten_indexed_alpha (pixels,
                                          transparent,
-                                         drawable->width * drawable->height);
+                                         cols * rows);
         }
       else
         {
@@ -949,7 +926,7 @@ save_image (const gchar *filename,
                              offset_x, offset_y);
       gimp_progress_update (1.0);
 
-      gimp_drawable_detach (drawable);
+      g_object_unref (buffer);
 
       g_free (pixels);
     }
@@ -1112,9 +1089,7 @@ save_dialog (gint32 image_ID)
   GtkTextBuffer *text_buffer;
   GtkWidget     *toggle;
   GtkWidget     *frame;
-#ifdef FACEHUGGERS
   GimpParasite  *GIF2_CMNT;
-#endif
   gint32         nlayers;
   gboolean       animation_supported = FALSE;
   gboolean       run;
@@ -1153,18 +1128,17 @@ save_dialog (gint32 image_ID)
   if (globalcomment)
     g_free (globalcomment);
 
-#ifdef FACEHUGGERS
   GIF2_CMNT = gimp_image_get_parasite (image_ID, "gimp-comment");
   if (GIF2_CMNT)
-    globalcomment = g_strndup (gimp_parasite_data (GIF2_CMNT),
-                               gimp_parasite_data_size (GIF2_CMNT));
+    {
+      globalcomment = g_strndup (gimp_parasite_data (GIF2_CMNT),
+                                 gimp_parasite_data_size (GIF2_CMNT));
+      gimp_parasite_free (GIF2_CMNT);
+    }
   else
-#endif
-    globalcomment = gimp_get_default_comment ();
-
-#ifdef FACEHUGGERS
-  gimp_parasite_free (GIF2_CMNT);
-#endif
+    {
+      globalcomment = gimp_get_default_comment ();
+    }
 
   if (globalcomment)
     gtk_text_buffer_set_text (text_buffer, globalcomment, -1);
@@ -1224,11 +1198,10 @@ save_dialog (gint32 image_ID)
   return run;
 }
 
-
 static int
 colors_to_bpp (int colors)
 {
-  int bpp;
+  gint bpp;
 
   if (colors <= 2)
     bpp = 1;
@@ -1248,20 +1221,19 @@ colors_to_bpp (int colors)
     bpp = 8;
   else
     {
-      g_warning ("GIF: colors_to_bpp - Eep! too many colours: %d\n", colors);
+      g_warning ("GIF: colors_to_bpp - Eep! too many colors: %d\n", colors);
       return 8;
     }
 
   return bpp;
 }
 
-
 static int
 bpp_to_colors (int bpp)
 {
-  int colors;
+  gint colors;
 
-  if (bpp>8)
+  if (bpp > 8)
     {
       g_warning ("GIF: bpp_to_colors - Eep! bpp==%d !\n", bpp);
       return 256;
@@ -1269,7 +1241,7 @@ bpp_to_colors (int bpp)
 
   colors = 1 << bpp;
 
-  return (colors);
+  return colors;
 }
 
 
@@ -1437,7 +1409,7 @@ gif_encode_header (FILE     *fp,
   put_word (RHeight, fp);
 
   /*
-   * Indicate that there is a global colour map
+   * Indicate that there is a global color map
    */
   B = 0x80;                        /* Yes, there is a color map */
 
@@ -1457,7 +1429,7 @@ gif_encode_header (FILE     *fp,
   fputc (B, fp);
 
   /*
-   * Write out the Background colour
+   * Write out the Background color
    */
   fputc (Background, fp);
 
@@ -1467,7 +1439,7 @@ gif_encode_header (FILE     *fp,
   fputc (0, fp);
 
   /*
-   * Write out the Global Colour Map
+   * Write out the Global Color Map
    */
   for (i = 0; i < ColorMapSize; i++)
     {
@@ -1508,7 +1480,7 @@ gif_encode_graphic_control_ext (FILE    *fp,
   curx = cury = 0;
 
   /*
-   * Write out extension for transparent colour index, if necessary.
+   * Write out extension for transparent color index, if necessary.
    */
   if ( (Transparent >= 0) || (NumFramesInImage > 1) )
     {
@@ -1728,14 +1700,7 @@ put_word (int   w,
 
 #define HSIZE  5003                /* 80% occupancy */
 
-#ifdef NO_UCHAR
-typedef char char_type;
-#else /*NO_UCHAR */
-typedef unsigned char char_type;
-#endif /*NO_UCHAR */
-
 /*
-
  * GIF Image compression - modified 'compress'
  *
  * Based on: compress.c - File compression ala IEEE Computer, June 1984.
@@ -1751,25 +1716,25 @@ typedef unsigned char char_type;
 
 static int n_bits;                /* number of bits/code */
 static int maxbits = GIF_BITS;        /* user settable max # bits/code */
-static code_int maxcode;        /* maximum code, given n_bits */
-static code_int maxmaxcode = (code_int) 1 << GIF_BITS;        /* should NEVER generate this code */
+static gint maxcode;        /* maximum code, given n_bits */
+static gint maxmaxcode = (gint) 1 << GIF_BITS;        /* should NEVER generate this code */
 #ifdef COMPATIBLE                /* But wrong! */
-#define MAXCODE(Mn_bits)        ((code_int) 1 << (Mn_bits) - 1)
+#define MAXCODE(Mn_bits)        ((gint) 1 << (Mn_bits) - 1)
 #else /*COMPATIBLE */
-#define MAXCODE(Mn_bits)        (((code_int) 1 << (Mn_bits)) - 1)
+#define MAXCODE(Mn_bits)        (((gint) 1 << (Mn_bits)) - 1)
 #endif /*COMPATIBLE */
 
-static count_int htab[HSIZE];
+static glong htab[HSIZE];
 static unsigned short codetab[HSIZE];
 #define HashTabOf(i)       htab[i]
 #define CodeTabOf(i)    codetab[i]
 
-static const code_int hsize = HSIZE; /* the original reason for this being
-                                        variable was "for dynamic table sizing",
-                                        but since it was never actually changed
-                                        I made it const   --Adam. */
+static const gint hsize = HSIZE; /* the original reason for this being
+                                    variable was "for dynamic table sizing",
+                                    but since it was never actually changed
+                                    I made it const   --Adam. */
 
-static code_int free_ent = 0;        /* first unused entry */
+static gint free_ent = 0;        /* first unused entry */
 
 /*
  * block compression parameters -- after all codes are used up,
@@ -1797,22 +1762,24 @@ static long int out_count = 0;        /* # of codes output (for debugging) */
  * questions about this implementation to ames!jaw.
  */
 
-static int g_init_bits;
+static gint  g_init_bits;
 static FILE *g_outfile;
 
 static int ClearCode;
 static int EOFCode;
 
 
-static unsigned long cur_accum;
-static int cur_bits;
+static gulong cur_accum;
+static gint   cur_bits;
 
-static unsigned long masks[] =
-{0x0000, 0x0001, 0x0003, 0x0007,
- 0x000F, 0x001F, 0x003F, 0x007F,
- 0x00FF, 0x01FF, 0x03FF, 0x07FF,
- 0x0FFF, 0x1FFF, 0x3FFF, 0x7FFF,
- 0xFFFF};
+static gulong masks[] =
+{
+  0x0000, 0x0001, 0x0003, 0x0007,
+  0x000F, 0x001F, 0x003F, 0x007F,
+  0x00FF, 0x01FF, 0x03FF, 0x07FF,
+  0x0FFF, 0x1FFF, 0x3FFF, 0x7FFF,
+  0xFFFF
+};
 
 
 static void
@@ -1820,29 +1787,25 @@ compress (int      init_bits,
           FILE    *outfile,
           ifunptr  ReadValue)
 {
-#ifdef GIF_UN
-        no_compress(init_bits, outfile, ReadValue);
-#else
-#ifdef GIF_RLE
-        rle_compress(init_bits, outfile, ReadValue);
-#else
-        normal_compress(init_bits, outfile, ReadValue);
-#endif
-#endif
+  if (FALSE)
+    no_compress (init_bits, outfile, ReadValue);
+  else if (FALSE)
+    rle_compress (init_bits, outfile, ReadValue);
+  else
+    normal_compress (init_bits, outfile, ReadValue);
 }
 
-#ifdef GIF_UN
 static void
 no_compress (int      init_bits,
              FILE    *outfile,
              ifunptr  ReadValue)
 {
-  register long fcode;
-  register code_int i /* = 0 */ ;
-  register int c;
-  register code_int ent;
-  register code_int hsize_reg;
-  register int hshift;
+  long fcode;
+  gint i /* = 0 */ ;
+  int c;
+  gint ent;
+  gint hsize_reg;
+  int hshift;
 
 
   /*
@@ -1871,7 +1834,6 @@ no_compress (int      init_bits,
   /* Had some problems here... should be okay now.  --Adam */
   n_bits = g_init_bits;
   maxcode = MAXCODE (n_bits);
-
 
 
   char_init ();
@@ -1884,34 +1846,24 @@ no_compress (int      init_bits,
   hshift = 8 - hshift;                /* set hash code range bound */
 
   hsize_reg = hsize;
-  cl_hash ((count_int) hsize_reg);        /* clear hash table */
+  cl_hash ((glong) hsize_reg);        /* clear hash table */
 
-  output ((code_int) ClearCode);
+  output ((gint) ClearCode);
 
 
-#ifdef SIGNED_COMPARE_SLOW
-  while ((c = gif_next_pixel (ReadValue)) != (unsigned) EOF)
-    {
-#else /*SIGNED_COMPARE_SLOW */
   while ((c = gif_next_pixel (ReadValue)) != EOF)
-    {                                /* } */
-#endif /*SIGNED_COMPARE_SLOW */
-
+    {
       ++in_count;
 
       fcode = (long) (((long) c << maxbits) + ent);
-      i = (((code_int) c << hshift) ^ ent);        /* xor hashing */
+      i = (((gint) c << hshift) ^ ent);        /* xor hashing */
 
-      output ((code_int) ent);
+      output ((gint) ent);
       ++out_count;
       ent = c;
-#ifdef SIGNED_COMPARE_SLOW
-      if ((unsigned) free_ent < (unsigned) maxmaxcode)
-        {
-#else /*SIGNED_COMPARE_SLOW */
+
       if (free_ent < maxmaxcode)
-        {                        /* } */
-#endif /*SIGNED_COMPARE_SLOW */
+        {
           CodeTabOf (i) = free_ent++;        /* code -> hashtable */
           HashTabOf (i) = fcode;
         }
@@ -1922,25 +1874,23 @@ no_compress (int      init_bits,
   /*
    * Put out the final code.
    */
-  output ((code_int) ent);
+  output ((gint) ent);
   ++out_count;
-  output ((code_int) EOFCode);
+  output ((gint) EOFCode);
 }
-#else
-#ifdef GIF_RLE
 
 static void
 rle_compress (int      init_bits,
               FILE    *outfile,
               ifunptr  ReadValue)
 {
-  register long fcode;
-  register code_int i /* = 0 */ ;
-  register int c, last;
-  register code_int ent;
-  register code_int disp;
-  register code_int hsize_reg;
-  register int hshift;
+  long fcode;
+  gint i /* = 0 */ ;
+  int c, last;
+  gint ent;
+  gint disp;
+  gint hsize_reg;
+  int hshift;
 
 
   /*
@@ -1971,7 +1921,6 @@ rle_compress (int      init_bits,
   maxcode = MAXCODE (n_bits);
 
 
-
   char_init ();
 
   last = ent = gif_next_pixel (ReadValue);
@@ -1982,24 +1931,18 @@ rle_compress (int      init_bits,
   hshift = 8 - hshift;                /* set hash code range bound */
 
   hsize_reg = hsize;
-  cl_hash ((count_int) hsize_reg);        /* clear hash table */
+  cl_hash ((glong) hsize_reg);        /* clear hash table */
 
-  output ((code_int) ClearCode);
+  output ((gint) ClearCode);
 
 
 
-#ifdef SIGNED_COMPARE_SLOW
-  while ((c = gif_next_pixel (ReadValue)) != (unsigned) EOF)
-    {
-#else /*SIGNED_COMPARE_SLOW */
   while ((c = gif_next_pixel (ReadValue)) != EOF)
-    {                                /* } */
-#endif /*SIGNED_COMPARE_SLOW */
-
+    {
       ++in_count;
 
       fcode = (long) (((long) c << maxbits) + ent);
-      i = (((code_int) c << hshift) ^ ent);        /* xor hashing */
+      i = (((gint) c << hshift) ^ ent);        /* xor hashing */
 
 
       if (last == c) {
@@ -2026,16 +1969,11 @@ rle_compress (int      init_bits,
           goto probe;
         }
     nomatch:
-      output ((code_int) ent);
+      output ((gint) ent);
       ++out_count;
       last = ent = c;
-#ifdef SIGNED_COMPARE_SLOW
-      if ((unsigned) free_ent < (unsigned) maxmaxcode)
-        {
-#else /*SIGNED_COMPARE_SLOW */
       if (free_ent < maxmaxcode)
-        {                        /* } */
-#endif /*SIGNED_COMPARE_SLOW */
+        {
           CodeTabOf (i) = free_ent++;        /* code -> hashtable */
           HashTabOf (i) = fcode;
         }
@@ -2046,25 +1984,23 @@ rle_compress (int      init_bits,
   /*
    * Put out the final code.
    */
-  output ((code_int) ent);
+  output ((gint) ent);
   ++out_count;
-  output ((code_int) EOFCode);
+  output ((gint) EOFCode);
 }
-
-#else
 
 static void
 normal_compress (int      init_bits,
                  FILE    *outfile,
                  ifunptr  ReadValue)
 {
-  register long fcode;
-  register code_int i /* = 0 */ ;
-  register int c;
-  register code_int ent;
-  register code_int disp;
-  register code_int hsize_reg;
-  register int hshift;
+  long fcode;
+  gint i /* = 0 */ ;
+  int c;
+  gint ent;
+  gint disp;
+  gint hsize_reg;
+  int hshift;
 
 
   /*
@@ -2095,7 +2031,6 @@ normal_compress (int      init_bits,
   maxcode = MAXCODE (n_bits);
 
 
-
   char_init ();
 
   ent = gif_next_pixel (ReadValue);
@@ -2106,24 +2041,17 @@ normal_compress (int      init_bits,
   hshift = 8 - hshift;                /* set hash code range bound */
 
   hsize_reg = hsize;
-  cl_hash ((count_int) hsize_reg);        /* clear hash table */
+  cl_hash ((glong) hsize_reg);        /* clear hash table */
 
-  output ((code_int) ClearCode);
+  output ((gint) ClearCode);
 
 
-
-#ifdef SIGNED_COMPARE_SLOW
-  while ((c = gif_next_pixel (ReadValue)) != (unsigned) EOF)
-    {
-#else /*SIGNED_COMPARE_SLOW */
   while ((c = gif_next_pixel (ReadValue)) != EOF)
-    {                                /* } */
-#endif /*SIGNED_COMPARE_SLOW */
-
+    {
       ++in_count;
 
       fcode = (long) (((long) c << maxbits) + ent);
-      i = (((code_int) c << hshift) ^ ent);        /* xor hashing */
+      i = (((gint) c << hshift) ^ ent);        /* xor hashing */
 
       if (HashTabOf (i) == fcode)
         {
@@ -2147,16 +2075,11 @@ normal_compress (int      init_bits,
       if ((long) HashTabOf (i) > 0)
         goto probe;
     nomatch:
-      output ((code_int) ent);
+      output ((gint) ent);
       ++out_count;
       ent = c;
-#ifdef SIGNED_COMPARE_SLOW
-      if ((unsigned) free_ent < (unsigned) maxmaxcode)
-        {
-#else /*SIGNED_COMPARE_SLOW */
       if (free_ent < maxmaxcode)
-        {                        /* } */
-#endif /*SIGNED_COMPARE_SLOW */
+        {
           CodeTabOf (i) = free_ent++;        /* code -> hashtable */
           HashTabOf (i) = fcode;
         }
@@ -2167,13 +2090,10 @@ normal_compress (int      init_bits,
   /*
    * Put out the final code.
    */
-  output ((code_int) ent);
+  output ((gint) ent);
   ++out_count;
-  output ((code_int) EOFCode);
+  output ((gint) EOFCode);
 }
-#endif
-#endif
-
 
 
 /*****************************************************************
@@ -2194,7 +2114,7 @@ normal_compress (int      init_bits,
  */
 
 static void
-output (code_int code)
+output (gint code)
 {
   cur_accum &= masks[cur_bits];
 
@@ -2253,7 +2173,7 @@ output (code_int code)
       fflush (g_outfile);
 
       if (ferror (g_outfile))
-        write_err ();
+        g_message (_("Error writing output file."));
     }
 }
 
@@ -2263,21 +2183,21 @@ output (code_int code)
 static void
 cl_block (void)                        /* table clear for block compress */
 {
-  cl_hash ((count_int) hsize);
+  cl_hash ((glong) hsize);
   free_ent = ClearCode + 2;
   clear_flg = 1;
 
-  output ((code_int) ClearCode);
+  output ((gint) ClearCode);
 }
 
 static void
-cl_hash (count_int hsize)        /* reset code table */
+cl_hash (glong hsize)        /* reset code table */
 {
 
-  register count_int *htab_p = htab + hsize;
+  glong *htab_p = htab + hsize;
 
-  register long i;
-  register long m1 = -1;
+  long i;
+  long m1 = -1;
 
   i = hsize - 16;
   do
@@ -2306,12 +2226,6 @@ cl_hash (count_int hsize)        /* reset code table */
     *--htab_p = m1;
 }
 
-static void
-write_err (void)
-{
-  g_message (_("Error writing output file."));
-  return;
-}
 
 /******************************************************************************
  *

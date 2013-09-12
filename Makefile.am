@@ -4,7 +4,6 @@ ACLOCAL_AMFLAGS = -I m4macros ${ACLOCAL_FLAGS}
 
 SUBDIRS = \
 	m4macros	\
-	tools		\
 	cursors		\
 	themes		\
 	po		\
@@ -17,6 +16,7 @@ SUBDIRS = \
 	desktop		\
 	menus		\
 	libgimpbase	\
+	tools		\
 	libgimpcolor	\
 	libgimpmath	\
 	libgimpconfig	\
@@ -55,6 +55,7 @@ EXTRA_DIST = \
 	ChangeLog.pre-2-2	\
 	ChangeLog.pre-2-4	\
 	ChangeLog.pre-2-6	\
+	ChangeLog.pre-git	\
 	HACKING			\
 	INSTALL			\
 	LICENSE			\

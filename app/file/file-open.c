@@ -147,6 +147,12 @@ file_open_image (Gimp                *gimp,
               return NULL;
             }
         }
+
+      if (file_proc->handles_uri)
+        {
+          g_free (filename);
+          filename = g_strdup (uri);
+        }
     }
   else
     {
@@ -328,22 +334,26 @@ file_open_thumbnail (Gimp           *gimp,
                   switch (value)
                     {
                     case GIMP_RGB_IMAGE:
-                      *format = gimp_babl_format (GIMP_RGB, GIMP_PRECISION_U8,
+                      *format = gimp_babl_format (GIMP_RGB,
+                                                  GIMP_PRECISION_U8_GAMMA,
                                                   FALSE);
                       break;
 
                     case GIMP_RGBA_IMAGE:
-                      *format = gimp_babl_format (GIMP_RGB, GIMP_PRECISION_U8,
+                      *format = gimp_babl_format (GIMP_RGB,
+                                                  GIMP_PRECISION_U8_GAMMA,
                                                   TRUE);
                       break;
 
                     case GIMP_GRAY_IMAGE:
-                      *format = gimp_babl_format (GIMP_GRAY, GIMP_PRECISION_U8,
+                      *format = gimp_babl_format (GIMP_GRAY,
+                                                  GIMP_PRECISION_U8_GAMMA,
                                                   FALSE);
                       break;
 
                     case GIMP_GRAYA_IMAGE:
-                      *format = gimp_babl_format (GIMP_GRAY, GIMP_PRECISION_U8,
+                      *format = gimp_babl_format (GIMP_GRAY,
+                                                  GIMP_PRECISION_U8_GAMMA,
                                                   TRUE);
                       break;
 
@@ -477,18 +487,23 @@ file_open_with_proc_and_display (Gimp                *gimp,
         {
           GimpDocumentList *documents = GIMP_DOCUMENT_LIST (gimp->documents);
           GimpImagefile    *imagefile;
+          const gchar      *any_uri;
 
           imagefile = gimp_document_list_add_uri (documents, uri, mime_type);
 
           /*  can only create a thumbnail if the passed uri and the
-           *  resulting image's uri match.
+           *  resulting image's uri match. Use any_uri() here so we
+           *  create thumbnails for both XCF and imported images.
            */
-          if (strcmp (uri, gimp_image_get_uri_or_untitled (image)) == 0)
+          any_uri = gimp_image_get_any_uri (image);
+
+          if (any_uri && ! strcmp (uri, any_uri))
             {
               /*  no need to save a thumbnail if there's a good one already  */
               if (! gimp_imagefile_check_thumbnail (imagefile))
                 {
-                  gimp_imagefile_save_thumbnail (imagefile, mime_type, image);
+                  gimp_imagefile_save_thumbnail (imagefile, mime_type, image,
+                                                 NULL);
                 }
             }
         }
@@ -599,6 +614,9 @@ file_open_from_command_line (Gimp        *gimp,
       GimpObject        *display = gimp_get_empty_display (gimp);
       GimpPDBStatusType  status;
 
+      if (display)
+        g_object_add_weak_pointer (G_OBJECT (display), (gpointer) &display);
+
       image = file_open_with_display (gimp,
                                       gimp_get_user_context (gimp),
                                       GIMP_PROGRESS (display),
@@ -612,7 +630,7 @@ file_open_from_command_line (Gimp        *gimp,
           g_object_set_data_full (G_OBJECT (gimp), GIMP_FILE_OPEN_LAST_URI_KEY,
                                   uri, (GDestroyNotify) g_free);
         }
-      else if (status != GIMP_PDB_CANCEL)
+      else if (status != GIMP_PDB_CANCEL && display)
         {
           gchar *filename = file_utils_uri_display_name (uri);
 
@@ -624,6 +642,9 @@ file_open_from_command_line (Gimp        *gimp,
           g_free (filename);
           g_free (uri);
         }
+
+      if (display)
+        g_object_remove_weak_pointer (G_OBJECT (display), (gpointer) &display);
     }
   else
     {
@@ -658,6 +679,9 @@ file_open_sanitize_image (GimpImage *image,
    */
   gimp_image_clean_all (image);
 
+#if 0
+  /* XXX this is not needed any longer, remove it when sure */
+
   /* make sure the entire projection is properly constructed, because
    * load plug-ins are not required to call gimp_drawable_update() or
    * anything.
@@ -670,6 +694,7 @@ file_open_sanitize_image (GimpImage *image,
 
   /* same for drawable previews */
   gimp_image_invalidate_previews (image);
+#endif
 }
 
 /* Converts items from one image to another */

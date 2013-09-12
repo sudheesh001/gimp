@@ -19,7 +19,7 @@
 
 #include <glib.h>  /* lcms.h uses the "inline" keyword */
 
-#include <lcms.h>
+#include <lcms2.h>
 
 #include <gegl.h>
 #include <gtk/gtk.h>
@@ -34,7 +34,7 @@
 
 /* definitions and variables */
 
-#define COLORSEL_TYPE_CMYK            (colorsel_cmyk_type)
+#define COLORSEL_TYPE_CMYK            (colorsel_cmyk_get_type ())
 #define COLORSEL_CMYK(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), COLORSEL_TYPE_CMYK, ColorselCmyk))
 #define COLORSEL_CMYK_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), COLORSEL_TYPE_CMYK, ColorselCmykClass))
 #define COLORSEL_IS_CMYK(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), COLORSEL_TYPE_CMYK))
@@ -65,9 +65,8 @@ struct _ColorselCmykClass
 };
 
 
-static GType  colorsel_cmyk_get_type       (GTypeModule       *module);
-static void   colorsel_cmyk_class_init     (ColorselCmykClass *klass);
-static void   colorsel_cmyk_init           (ColorselCmyk      *cmyk);
+static GType  colorsel_cmyk_get_type       (void);
+
 static void   colorsel_cmyk_dispose        (GObject           *object);
 
 static void   colorsel_cmyk_set_color      (GimpColorSelector *selector,
@@ -91,8 +90,9 @@ static const GimpModuleInfo colorsel_cmyk_info =
   "September 2006"
 };
 
-static GType         colorsel_cmyk_type = 0;
-static GObjectClass *parent_class       = NULL;
+
+G_DEFINE_DYNAMIC_TYPE (ColorselCmyk, colorsel_cmyk,
+                       GIMP_TYPE_COLOR_SELECTOR)
 
 
 G_MODULE_EXPORT const GimpModuleInfo *
@@ -104,37 +104,9 @@ gimp_module_query (GTypeModule *module)
 G_MODULE_EXPORT gboolean
 gimp_module_register (GTypeModule *module)
 {
-  colorsel_cmyk_get_type (module);
+  colorsel_cmyk_register_type (module);
 
   return TRUE;
-}
-
-static GType
-colorsel_cmyk_get_type (GTypeModule *module)
-{
-  if (! colorsel_cmyk_type)
-    {
-      const GTypeInfo select_info =
-      {
-        sizeof (ColorselCmykClass),
-        (GBaseInitFunc) NULL,
-        (GBaseFinalizeFunc) NULL,
-        (GClassInitFunc) colorsel_cmyk_class_init,
-        NULL,           /* class_finalize */
-        NULL,           /* class_data     */
-        sizeof (ColorselCmyk),
-        0,              /* n_preallocs    */
-        (GInstanceInitFunc) colorsel_cmyk_init,
-      };
-
-      colorsel_cmyk_type =
-        g_type_module_register_type (module,
-                                     GIMP_TYPE_COLOR_SELECTOR,
-                                     "ColorselCmyk",
-                                     &select_info, 0);
-    }
-
-  return colorsel_cmyk_type;
 }
 
 static void
@@ -143,8 +115,6 @@ colorsel_cmyk_class_init (ColorselCmykClass *klass)
   GObjectClass           *object_class   = G_OBJECT_CLASS (klass);
   GimpColorSelectorClass *selector_class = GIMP_COLOR_SELECTOR_CLASS (klass);
 
-  parent_class = g_type_class_peek_parent (klass);
-
   object_class->dispose      = colorsel_cmyk_dispose;
 
   selector_class->name       = _("CMYK");
@@ -152,8 +122,11 @@ colorsel_cmyk_class_init (ColorselCmykClass *klass)
   selector_class->stock_id   = GTK_STOCK_PRINT;  /* FIXME */
   selector_class->set_color  = colorsel_cmyk_set_color;
   selector_class->set_config = colorsel_cmyk_set_config;
+}
 
-  cmsErrorAction (LCMS_ERROR_IGNORE);
+static void
+colorsel_cmyk_class_finalize (ColorselCmykClass *klass)
+{
 }
 
 static void
@@ -236,7 +209,7 @@ colorsel_cmyk_dispose (GObject *object)
 
   colorsel_cmyk_set_config (GIMP_COLOR_SELECTOR (object), NULL);
 
-  G_OBJECT_CLASS (parent_class)->dispose (object);
+  G_OBJECT_CLASS (colorsel_cmyk_parent_class)->dispose (object);
 }
 
 static void
@@ -392,10 +365,12 @@ colorsel_cmyk_config_changed (ColorselCmyk *module)
 {
   GimpColorSelector *selector = GIMP_COLOR_SELECTOR (module);
   GimpColorConfig   *config   = module->config;
-  DWORD              flags    = 0;
+  cmsUInt32Number    flags    = 0;
+  cmsUInt32Number    descSize = 0;
   cmsHPROFILE        rgb_profile;
   cmsHPROFILE        cmyk_profile;
-  const gchar       *name;
+  gchar             *descData;
+  const gchar       *name     = NULL;
   gchar             *text;
 
   if (module->rgb2cmyk)
@@ -420,13 +395,47 @@ colorsel_cmyk_config_changed (ColorselCmyk *module)
       ! (cmyk_profile = cmsOpenProfileFromFile (config->cmyk_profile, "r")))
     goto out;
 
-  name = cmsTakeProductDesc (cmyk_profile);
+  descSize = cmsGetProfileInfoASCII (cmyk_profile, cmsInfoDescription,
+                                     "en", "US", NULL, 0);
+  if (descSize > 0)
+    {
+      descData = g_new (gchar, descSize + 1);
+      descSize = cmsGetProfileInfoASCII (cmyk_profile, cmsInfoDescription,
+                                         "en", "US", descData, descSize);
+      if (descSize > 0)
+        {
+          name = descData;
+        }
+      else
+        {
+          g_free (descData);
+          descData = NULL;
+        }
+    }
+
   if (name && ! g_utf8_validate (name, -1, NULL))
     name = _("(invalid UTF-8 string)");
 
   if (! name)
     {
-      name = cmsTakeProductName (cmyk_profile);
+      descSize = cmsGetProfileInfoASCII (cmyk_profile, cmsInfoModel,
+                                         "en", "US", NULL, 0);
+      if (descSize > 0)
+        {
+          descData = g_new (gchar, descSize + 1);
+          descSize = cmsGetProfileInfoASCII (cmyk_profile, cmsInfoModel,
+                                             "en", "US", descData, descSize);
+          if (descSize > 0)
+            {
+              name = descData;
+            }
+          else
+            {
+              g_free (descData);
+              descData = NULL;
+            }
+        }
+
       if (name && ! g_utf8_validate (name, -1, NULL))
         name = _("(invalid UTF-8 string)");
     }
@@ -435,6 +444,9 @@ colorsel_cmyk_config_changed (ColorselCmyk *module)
   gtk_label_set_text (GTK_LABEL (module->name_label), text);
   gimp_help_set_help_data (module->name_label, text, NULL);
   g_free (text);
+
+  if (descData)
+    g_free (descData);
 
   rgb_profile = color_config_get_rgb_profile (config);
 

@@ -129,8 +129,7 @@ gimp_scale_combo_box_constructed (GObject *object)
   GtkBorder          border = { 0, 0, 0, 0 };
   gint               i;
 
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   store = gtk_list_store_new (N_COLUMNS,
                               G_TYPE_DOUBLE,    /* SCALE       */
@@ -377,7 +376,7 @@ gimp_scale_combo_box_scale_iter_set (GtkListStore *store,
 {
   gchar label[32];
 
-  /*  use U+2009 THIN SPACE to seperate the percent sign from the number */
+  /*  use U+2009 THIN SPACE to separate the percent sign from the number */
 
   if (scale > 1.0)
     g_snprintf (label, sizeof (label),

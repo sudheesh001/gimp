@@ -51,12 +51,12 @@ GimpLayerModeEffects   gimp_context_get_paint_mode            (void);
 gboolean               gimp_context_set_paint_mode            (GimpLayerModeEffects      paint_mode);
 gchar*                 gimp_context_get_brush                 (void);
 gboolean               gimp_context_set_brush                 (const gchar              *name);
-gboolean               gimp_context_get_brush_size            (gdouble                   size);
+gdouble                gimp_context_get_brush_size            (void);
 gboolean               gimp_context_set_brush_size            (gdouble                   size);
 gboolean               gimp_context_set_brush_default_size    (void);
-gboolean               gimp_context_get_brush_aspect_ratio    (gdouble                   aspect);
+gdouble                gimp_context_get_brush_aspect_ratio    (void);
 gboolean               gimp_context_set_brush_aspect_ratio    (gdouble                   aspect);
-gboolean               gimp_context_get_brush_angle           (gdouble                   angle);
+gdouble                gimp_context_get_brush_angle           (void);
 gboolean               gimp_context_set_brush_angle           (gdouble                   angle);
 gchar*                 gimp_context_get_dynamics              (void);
 gboolean               gimp_context_set_dynamics              (const gchar              *name);
@@ -92,7 +92,9 @@ GimpTransformDirection gimp_context_get_transform_direction   (void);
 gboolean               gimp_context_set_transform_direction   (GimpTransformDirection    transform_direction);
 GimpTransformResize    gimp_context_get_transform_resize      (void);
 gboolean               gimp_context_set_transform_resize      (GimpTransformResize       transform_resize);
+GIMP_DEPRECATED
 gint                   gimp_context_get_transform_recursion   (void);
+GIMP_DEPRECATED
 gboolean               gimp_context_set_transform_recursion   (gint                      transform_recursion);
 gdouble                gimp_context_get_ink_size              (void);
 gboolean               gimp_context_set_ink_size              (gdouble                   size);

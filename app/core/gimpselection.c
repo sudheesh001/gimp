@@ -23,12 +23,11 @@
 
 #include "core-types.h"
 
-#include "gegl/gimp-gegl-nodes.h"
-#include "gegl/gimp-gegl-utils.h"
+#include "gegl/gimp-babl.h"
+#include "gegl/gimp-gegl-apply-operation.h"
 
 #include "gimp.h"
 #include "gimp-edit.h"
-#include "gimp-apply-operation.h"
 #include "gimpcontext.h"
 #include "gimpdrawable-private.h"
 #include "gimperror.h"
@@ -80,6 +79,14 @@ static gboolean   gimp_selection_stroke        (GimpItem            *item,
                                                 gboolean             push_undo,
                                                 GimpProgress        *progress,
                                                 GError             **error);
+static void       gimp_selection_convert_type  (GimpDrawable        *drawable,
+                                                GimpImage           *dest_image,
+                                                const Babl          *new_format,
+                                                GimpImageBaseType    new_base_type,
+                                                GimpPrecision        new_precision,
+                                                gint                 layer_dither_type,
+                                                gint                 mask_dither_type,
+                                                gboolean             push_undo);
 static void gimp_selection_invalidate_boundary (GimpDrawable        *drawable);
 
 static gboolean   gimp_selection_boundary      (GimpChannel         *channel,
@@ -154,6 +161,7 @@ gimp_selection_class_init (GimpSelectionClass *klass)
   item_class->translate_desc          = C_("undo-type", "Move Selection");
   item_class->stroke_desc             = C_("undo-type", "Stroke Selection");
 
+  drawable_class->convert_type        = gimp_selection_convert_type;
   drawable_class->invalidate_boundary = gimp_selection_invalidate_boundary;
 
   channel_class->boundary             = gimp_selection_boundary;
@@ -298,6 +306,27 @@ gimp_selection_stroke (GimpItem           *item,
 }
 
 static void
+gimp_selection_convert_type (GimpDrawable      *drawable,
+                             GimpImage         *dest_image,
+                             const Babl        *new_format,
+                             GimpImageBaseType  new_base_type,
+                             GimpPrecision      new_precision,
+                             gint               layer_dither_type,
+                             gint               mask_dither_type,
+                             gboolean           push_undo)
+{
+  new_format = gimp_babl_mask_format (new_precision);
+
+  GIMP_DRAWABLE_CLASS (parent_class)->convert_type (drawable, dest_image,
+                                                    new_format,
+                                                    new_base_type,
+                                                    new_precision,
+                                                    layer_dither_type,
+                                                    mask_dither_type,
+                                                    push_undo);
+}
+
+static void
 gimp_selection_invalidate_boundary (GimpDrawable *drawable)
 {
   GimpImage *image = gimp_item_get_image (GIMP_ITEM (drawable));
@@ -320,8 +349,13 @@ gimp_selection_invalidate_boundary (GimpDrawable *drawable)
                           gimp_item_get_width  (GIMP_ITEM (layer)),
                           gimp_item_get_height (GIMP_ITEM (layer)));
 
+#ifdef __GNUC__
+#warning FIXME is this still needed?
+#endif
+#if 0
   /*  invalidate the preview  */
   drawable->private->preview_valid = FALSE;
+#endif
 }
 
 static gboolean
@@ -700,8 +734,8 @@ gimp_selection_extract (GimpSelection *selection,
   src_buffer = gimp_pickable_get_buffer (pickable);
 
   /*  Allocate the temp buffer  */
-  dest_buffer = gimp_gegl_buffer_new (GEGL_RECTANGLE (0, 0, x2 - x1, y2 - y1),
-                                      dest_format);
+  dest_buffer = gegl_buffer_new (GEGL_RECTANGLE (0, 0, x2 - x1, y2 - y1),
+                                 dest_format);
 
   /*  First, copy the pixels, possibly doing INDEXED->RGB and adding alpha  */
   gegl_buffer_copy (src_buffer, GEGL_RECTANGLE (x1, y1, x2 - x1, y2 - y1),
@@ -712,20 +746,14 @@ gimp_selection_extract (GimpSelection *selection,
       /*  If there is a selection, mask the dest_buffer with it  */
 
       GeglBuffer *mask_buffer;
-      GeglNode   *apply_opacity;
 
       mask_buffer = gimp_drawable_get_buffer (GIMP_DRAWABLE (selection));
 
-      apply_opacity = gimp_gegl_create_apply_opacity_node (mask_buffer,
-                                                           - (off_x + x1),
-                                                           - (off_y + y1),
-                                                           1.0);
-
-      gimp_apply_operation (dest_buffer, NULL, NULL,
-                            apply_opacity,
-                            dest_buffer, NULL);
-
-      g_object_unref (apply_opacity);
+      gimp_gegl_apply_opacity (dest_buffer, NULL, NULL, dest_buffer,
+                               mask_buffer,
+                               - (off_x + x1),
+                               - (off_y + y1),
+                               1.0);
 
       if (cut_image && GIMP_IS_DRAWABLE (pickable))
         {
