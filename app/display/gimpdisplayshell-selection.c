@@ -68,7 +68,7 @@ static void      selection_undraw         (Selection          *selection);
 
 static void      selection_render_mask    (Selection          *selection);
 
-static void      selection_transform_segs (Selection          *selection,
+static void      selection_zoom_segs      (Selection          *selection,
                                            const GimpBoundSeg *src_segs,
                                            GimpSegment        *dest_segs,
                                            gint                n_segs);
@@ -115,35 +115,36 @@ gimp_display_shell_selection_init (GimpDisplayShell *shell)
 void
 gimp_display_shell_selection_free (GimpDisplayShell *shell)
 {
+  Selection *selection;
+
   g_return_if_fail (GIMP_IS_DISPLAY_SHELL (shell));
+  g_return_if_fail (shell->selection != NULL);
 
-  if (shell->selection)
-    {
-      Selection *selection = shell->selection;
+  selection = shell->selection;
 
-      selection_stop (selection);
+  selection_stop (selection);
 
-      g_signal_handlers_disconnect_by_func (shell,
-                                            selection_window_state_event,
-                                            selection);
-      g_signal_handlers_disconnect_by_func (shell,
-                                            selection_visibility_notify_event,
-                                            selection);
+  g_signal_handlers_disconnect_by_func (shell,
+                                        selection_window_state_event,
+                                        selection);
+  g_signal_handlers_disconnect_by_func (shell,
+                                        selection_visibility_notify_event,
+                                        selection);
 
-      selection_free_segs (selection);
+  selection_free_segs (selection);
 
-      g_slice_free (Selection, selection);
+  g_slice_free (Selection, selection);
 
-      shell->selection = NULL;
-    }
+  shell->selection = NULL;
 }
 
 void
 gimp_display_shell_selection_undraw (GimpDisplayShell *shell)
 {
   g_return_if_fail (GIMP_IS_DISPLAY_SHELL (shell));
+  g_return_if_fail (shell->selection != NULL);
 
-  if (shell->selection && gimp_display_get_image (shell->display))
+  if (gimp_display_get_image (shell->display))
     {
       selection_undraw (shell->selection);
     }
@@ -158,8 +159,9 @@ void
 gimp_display_shell_selection_restart (GimpDisplayShell *shell)
 {
   g_return_if_fail (GIMP_IS_DISPLAY_SHELL (shell));
+  g_return_if_fail (shell->selection != NULL);
 
-  if (shell->selection && gimp_display_get_image (shell->display))
+  if (gimp_display_get_image (shell->display))
     {
       selection_start (shell->selection);
     }
@@ -169,8 +171,9 @@ void
 gimp_display_shell_selection_pause (GimpDisplayShell *shell)
 {
   g_return_if_fail (GIMP_IS_DISPLAY_SHELL (shell));
+  g_return_if_fail (shell->selection != NULL);
 
-  if (shell->selection && gimp_display_get_image (shell->display))
+  if (gimp_display_get_image (shell->display))
     {
       if (shell->selection->paused == 0)
         selection_stop (shell->selection);
@@ -183,8 +186,9 @@ void
 gimp_display_shell_selection_resume (GimpDisplayShell *shell)
 {
   g_return_if_fail (GIMP_IS_DISPLAY_SHELL (shell));
+  g_return_if_fail (shell->selection != NULL);
 
-  if (shell->selection && gimp_display_get_image (shell->display))
+  if (gimp_display_get_image (shell->display))
     {
       shell->selection->paused--;
 
@@ -198,8 +202,9 @@ gimp_display_shell_selection_set_show (GimpDisplayShell *shell,
                                        gboolean          show)
 {
   g_return_if_fail (GIMP_IS_DISPLAY_SHELL (shell));
+  g_return_if_fail (shell->selection != NULL);
 
-  if (shell->selection && gimp_display_get_image (shell->display))
+  if (gimp_display_get_image (shell->display))
     {
       Selection *selection = shell->selection;
 
@@ -292,6 +297,9 @@ selection_render_mask (Selection *selection)
   cairo_set_line_cap (cr, CAIRO_LINE_CAP_SQUARE);
   cairo_set_line_width (cr, 1.0);
 
+  if (selection->shell->rotate_transform)
+    cairo_transform (cr, selection->shell->rotate_transform);
+
   gimp_cairo_add_segments (cr,
                            selection->segs_in,
                            selection->n_segs_in);
@@ -304,18 +312,18 @@ selection_render_mask (Selection *selection)
 }
 
 static void
-selection_transform_segs (Selection          *selection,
-                          const GimpBoundSeg *src_segs,
-                          GimpSegment        *dest_segs,
-                          gint                n_segs)
+selection_zoom_segs (Selection          *selection,
+                     const GimpBoundSeg *src_segs,
+                     GimpSegment        *dest_segs,
+                     gint                n_segs)
 {
   const gint xclamp = selection->shell->disp_width + 1;
   const gint yclamp = selection->shell->disp_height + 1;
   gint       i;
 
-  gimp_display_shell_transform_segments (selection->shell,
-                                         src_segs, dest_segs, n_segs,
-                                         0.0, 0.0);
+  gimp_display_shell_zoom_segments (selection->shell,
+                                    src_segs, dest_segs, n_segs,
+                                    0.0, 0.0);
 
   for (i = 0; i < n_segs; i++)
     {
@@ -365,8 +373,8 @@ selection_generate_segs (Selection *selection)
   if (selection->n_segs_in)
     {
       selection->segs_in = g_new (GimpSegment, selection->n_segs_in);
-      selection_transform_segs (selection, segs_in,
-                                selection->segs_in, selection->n_segs_in);
+      selection_zoom_segs (selection, segs_in,
+                           selection->segs_in, selection->n_segs_in);
 
       selection_render_mask (selection);
     }
@@ -379,8 +387,8 @@ selection_generate_segs (Selection *selection)
   if (selection->n_segs_out)
     {
       selection->segs_out = g_new (GimpSegment, selection->n_segs_out);
-      selection_transform_segs (selection, segs_out,
-                                selection->segs_out, selection->n_segs_out);
+      selection_zoom_segs (selection, segs_out,
+                           selection->segs_out, selection->n_segs_out);
     }
   else
     {
@@ -437,6 +445,9 @@ selection_start_timeout (Selection *selection)
           cairo_t *cr;
 
           cr = gdk_cairo_create (gtk_widget_get_window (selection->shell->canvas));
+
+          if (selection->shell->rotate_transform)
+            cairo_transform (cr, selection->shell->rotate_transform);
 
           gimp_display_shell_draw_selection_out (selection->shell, cr,
                                                  selection->segs_out,

@@ -49,7 +49,7 @@
 #define WAIT_ANY -1
 #endif
 
-#include <glib-object.h>
+#include <gtk/gtk.h> /* need GDK_WINDOWING_FOO defines */
 
 #ifndef G_OS_WIN32
 #include "libgimpbase/gimpsignal.h"
@@ -82,10 +82,15 @@
 
 #endif /* USE_POSIX_SHM */
 
+#ifdef GDK_WINDOWING_QUARTZ
+#include <Cocoa/Cocoa.h>
+#endif
+
 #if defined(G_OS_WIN32) || defined(G_WITH_CYGWIN)
 #  define STRICT
 #  define _WIN32_WINNT 0x0601
 #  include <windows.h>
+#  include <tlhelp32.h>
 #  undef RGB
 #  define USE_WIN32_SHM 1
 #endif
@@ -114,7 +119,7 @@
  **/
 
 
-#define TILE_MAP_SIZE (_tile_width * _tile_height * 4)
+#define TILE_MAP_SIZE (_tile_width * _tile_height * 16)
 
 #define ERRMSG_SHM_FAILED "Could not attach to gimp shared memory segment"
 
@@ -332,6 +337,8 @@ gimp_main (const GimpPlugInInfo *info,
 
   if (env_string)
     {
+      const gchar *debug_messages;
+
       debug_string = strchr (env_string, ',');
 
       if (debug_string)
@@ -350,6 +357,20 @@ gimp_main (const GimpPlugInInfo *info,
       else if (strcmp (env_string, basename) == 0)
         {
           gimp_debug_flags = GIMP_DEBUG_DEFAULT;
+        }
+
+      /*  make debug output visible by setting G_MESSAGES_DEBUG  */
+      debug_messages = g_getenv ("G_MESSAGES_DEBUG");
+
+      if (debug_messages)
+        {
+          gchar *tmp = g_strconcat (debug_messages, ",LibGimp", NULL);
+          g_setenv ("G_MESSAGES_DEBUG", tmp, TRUE);
+          g_free (tmp);
+        }
+      else
+        {
+          g_setenv ("G_MESSAGES_DEBUG", "LibGimp", TRUE);
         }
     }
 
@@ -397,7 +418,6 @@ gimp_main (const GimpPlugInInfo *info,
   gimp_wire_set_writer (gimp_write);
   gimp_wire_set_flusher (gimp_flush);
 
-  g_type_init ();
   gimp_enums_init ();
 
   /*  initialize units  */
@@ -1629,10 +1649,50 @@ static void
 gimp_debug_stop (void)
 {
 #ifndef G_OS_WIN32
+
   g_log (G_LOG_DOMAIN, G_LOG_LEVEL_DEBUG, "Waiting for debugger...");
   raise (SIGSTOP);
+
 #else
-  g_log (G_LOG_DOMAIN, G_LOG_LEVEL_DEBUG, "Debugging not implemented on Win32");
+
+  HANDLE        hThreadSnap = NULL;
+  THREADENTRY32 te32        = { 0 };
+  pid_t         opid        = getpid ();
+
+  g_log (G_LOG_DOMAIN, G_LOG_LEVEL_DEBUG, "Debugging (restart externally): %d",
+         opid);
+
+  hThreadSnap = CreateToolhelp32Snapshot (TH32CS_SNAPTHREAD, 0);
+  if (hThreadSnap == INVALID_HANDLE_VALUE)
+    {
+      g_log (G_LOG_DOMAIN, G_LOG_LEVEL_DEBUG,
+             "error getting threadsnap - debugging impossible");
+      return;
+    }
+
+  te32.dwSize = sizeof (THREADENTRY32);
+
+  if (Thread32First (hThreadSnap, &te32))
+    {
+      do
+        {
+          if (te32.th32OwnerProcessID == opid)
+            {
+              HANDLE hThread = OpenThread (THREAD_SUSPEND_RESUME, FALSE,
+                                           te32.th32ThreadID);
+              SuspendThread (hThread);
+              CloseHandle (hThread);
+            }
+        }
+      while (Thread32Next (hThreadSnap, &te32));
+    }
+  else
+    {
+      g_log (G_LOG_DOMAIN, G_LOG_LEVEL_DEBUG, "error getting threads");
+    }
+
+  CloseHandle (hThreadSnap);
+
 #endif
 }
 
@@ -2002,7 +2062,6 @@ gimp_proc_run (GPProcRun *proc_run)
     }
 }
 
-
 static void
 gimp_temp_proc_run (GPProcRun *proc_run)
 {
@@ -2013,6 +2072,14 @@ gimp_temp_proc_run (GPProcRun *proc_run)
       GPProcReturn  proc_return;
       GimpParam    *return_vals;
       gint          n_return_vals;
+
+#ifdef GDK_WINDOWING_QUARTZ
+      if (proc_run->params &&
+          proc_run->params[0].data.d_int32 == GIMP_RUN_INTERACTIVE)
+        {
+          [NSApp activateIgnoringOtherApps: YES];
+        }
+#endif
 
       (* run_proc) (proc_run->name,
                     proc_run->nparams,

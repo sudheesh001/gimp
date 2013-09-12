@@ -30,7 +30,7 @@ HELP
 	{ name => 'message', type => 'string', null_ok => 1, wrap => 1,
 	  desc => 'Message to use in the progress dialog' },
 	{ name => 'gdisplay', type => 'display', none_ok => 1,
-	  desc => 'GimpDisplay to update progressbar in, or -1 for a seperate
+	  desc => 'GimpDisplay to update progressbar in, or -1 for a separate
 		   window' }
     );
 
@@ -118,9 +118,9 @@ sub progress_set_text {
     $blurb = 'Changes the text in the progress bar for the current plug-in.';
 
     $help = <<'HELP';
-This function allows to change the text in the progress bar for the
-current plug-in. Unlike gimp_progress_init() it does not change the
-displayed value.
+This function changes the text in the progress bar for the current
+plug-in. Unlike gimp_progress_init() it does not change the displayed
+value.
 HELP
 
     &neo_pdb_misc('2005', '2.4');

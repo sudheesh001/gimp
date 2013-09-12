@@ -25,16 +25,12 @@ libexecdir = $(gimpplugindir)/plug-ins
 
 libexec_PROGRAMS = pagecurl
 
-pagecurl_sources = pagecurl.c
+pagecurl_SOURCES = pagecurl.c
+nodist_pagecurl_SOURCES = pagecurl-icons.h
 
-pagecurl_built_sources = pagecurl-icons.h
-pagecurl.c: $(pagecurl_built_sources)
+BUILT_SOURCES = pagecurl-icons.h
 
-pagecurl_SOURCES = \
-	$(pagecurl_built_sources) $(pagecurl_sources)
-
-
-INCLUDES = \
+AM_CPPFLAGS = \
 	-I$(top_srcdir)	\
 	$(GTK_CFLAGS)	\
 	$(GEGL_CFLAGS) \
@@ -67,7 +63,7 @@ PAGECURL_IMAGES = \
 
 EXTRA_DIST = $(PAGECURL_IMAGES)
 
-CLEANFILES = $(pagecurl_built_sources) pagecurl-icons.list
+CLEANFILES = $(BUILT_SOURCES) pagecurl-icons.list
 
 pagecurl-icons.list: $(PAGECURL_IMAGES) Makefile.am
 	( rm -f $@; \

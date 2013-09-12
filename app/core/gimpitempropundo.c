@@ -97,8 +97,7 @@ gimp_item_prop_undo_constructed (GObject *object)
   GimpItemPropUndo *item_prop_undo = GIMP_ITEM_PROP_UNDO (object);
   GimpItem         *item;
 
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   item = GIMP_ITEM_UNDO (object)->item;
 
@@ -125,6 +124,14 @@ gimp_item_prop_undo_constructed (GObject *object)
 
     case GIMP_UNDO_ITEM_LINKED:
       item_prop_undo->linked  = gimp_item_get_linked (item);
+      break;
+
+    case GIMP_UNDO_ITEM_LOCK_CONTENT:
+      item_prop_undo->lock_content = gimp_item_get_lock_content (item);
+      break;
+
+    case GIMP_UNDO_ITEM_LOCK_POSITION:
+      item_prop_undo->lock_position = gimp_item_get_lock_position (item);
       break;
 
     case GIMP_UNDO_PARASITE_ATTACH:
@@ -274,6 +281,26 @@ gimp_item_prop_undo_pop (GimpUndo            *undo,
         linked = gimp_item_get_linked (item);
         gimp_item_set_linked (item, item_prop_undo->linked, FALSE);
         item_prop_undo->linked = linked;
+      }
+      break;
+
+    case GIMP_UNDO_ITEM_LOCK_CONTENT:
+      {
+        gboolean lock_content;
+
+        lock_content = gimp_item_get_lock_content (item);
+        gimp_item_set_lock_content (item, item_prop_undo->lock_content, FALSE);
+        item_prop_undo->lock_content = lock_content;
+      }
+      break;
+
+    case GIMP_UNDO_ITEM_LOCK_POSITION:
+      {
+        gboolean lock_position;
+
+        lock_position = gimp_item_get_lock_position (item);
+        gimp_item_set_lock_position (item, item_prop_undo->lock_position, FALSE);
+        item_prop_undo->lock_position = lock_position;
       }
       break;
 

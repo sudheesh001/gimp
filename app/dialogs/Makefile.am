@@ -1,15 +1,13 @@
 ## Process this file with automake to produce Makefile.in
 
 AM_CPPFLAGS = \
-	-DG_LOG_DOMAIN=\"Gimp-Dialogs\"
-
-INCLUDES = \
-	-I$(top_builddir)	\
-	-I$(top_srcdir)		\
-	-I$(top_builddir)/app	\
-	-I$(top_srcdir)/app	\
-	$(GEGL_CFLAGS)		\
-	$(GTK_CFLAGS)		\
+	-DG_LOG_DOMAIN=\"Gimp-Dialogs\"	\
+	-I$(top_builddir)		\
+	-I$(top_srcdir)			\
+	-I$(top_builddir)/app		\
+	-I$(top_srcdir)/app		\
+	$(GEGL_CFLAGS)			\
+	$(GTK_CFLAGS)			\
 	-I$(includedir)
 
 noinst_LIBRARIES = libappdialogs.a
@@ -25,8 +23,10 @@ libappdialogs_a_sources = \
 	about-dialog.h			\
 	channel-options-dialog.c	\
 	channel-options-dialog.h	\
-	convert-dialog.c		\
-	convert-dialog.h		\
+	convert-precision-dialog.c	\
+	convert-precision-dialog.h	\
+	convert-type-dialog.c		\
+	convert-type-dialog.h		\
 	data-delete-dialog.c		\
 	data-delete-dialog.h		\
 	fade-dialog.c			\

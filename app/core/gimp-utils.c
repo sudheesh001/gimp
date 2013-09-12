@@ -64,7 +64,6 @@
 #include "gimpparamspecs.h"
 
 
-#define NUM_PROCESSORS_DEFAULT 1
 #define MAX_FUNC               100
 
 
@@ -330,27 +329,6 @@ gimp_get_pid (void)
   return (gint) getpid ();
 }
 
-gint
-gimp_get_number_of_processors (void)
-{
-  gint retval = NUM_PROCESSORS_DEFAULT;
-
-#ifdef G_OS_UNIX
-#if defined(HAVE_UNISTD_H) && defined(_SC_NPROCESSORS_ONLN)
-  retval = sysconf (_SC_NPROCESSORS_ONLN);
-#endif
-#endif
-#ifdef G_OS_WIN32
-  SYSTEM_INFO system_info;
-
-  GetSystemInfo (&system_info);
-
-  retval = system_info.dwNumberOfProcessors;
-#endif
-
-  return retval;
-}
-
 guint64
 gimp_get_physical_memory_size (void)
 {
@@ -477,7 +455,7 @@ gimp_get_default_language (const gchar *category)
 GimpUnit
 gimp_get_default_unit (void)
 {
-#ifdef HAVE__NL_MEASUREMENT_MEASUREMENT
+#if defined (HAVE__NL_MEASUREMENT_MEASUREMENT)
   const gchar *measurement = nl_langinfo (_NL_MEASUREMENT_MEASUREMENT);
 
   switch (*((guchar *) measurement))
@@ -487,6 +465,27 @@ gimp_get_default_unit (void)
 
     case 2: /* imperial */
       return GIMP_UNIT_INCH;
+    }
+
+#elif defined (G_OS_WIN32)
+  DWORD measurement;
+  int   ret;
+
+  ret = GetLocaleInfo(LOCALE_USER_DEFAULT,
+                      LOCALE_IMEASURE | LOCALE_RETURN_NUMBER,
+                      (LPTSTR)&measurement,
+                      sizeof(measurement) / sizeof(TCHAR) );
+
+  if (ret != 0) /* GetLocaleInfo succeeded */
+    {
+    switch ((guint) measurement)
+      {
+      case 0: /* metric */
+        return GIMP_UNIT_MM;
+
+      case 1: /* imperial */
+        return GIMP_UNIT_INCH;
+      }
     }
 #endif
 
@@ -757,7 +756,7 @@ gimp_enum_get_value_name (GType enum_type,
                           gint  value)
 {
   const gchar *value_name = NULL;
-  
+
   gimp_enum_get_value (enum_type,
                        value,
                        &value_name,
@@ -853,4 +852,40 @@ gimp_constrain_line (gdouble  start_x,
           *end_y = constrained_point.y;
         }
     }
+}
+
+
+/*  debug stuff  */
+
+#include "gegl/gimp-babl.h"
+#include "gimpimage.h"
+#include "gimplayer.h"
+
+void
+gimp_create_image_from_buffer (Gimp       *gimp,
+                               GeglBuffer *buffer)
+{
+  GimpImage  *image;
+  GimpLayer  *layer;
+  const Babl *format;
+
+  g_return_if_fail (GIMP_IS_GIMP (gimp));
+  g_return_if_fail (GEGL_IS_BUFFER (buffer));
+
+  format = gegl_buffer_get_format (buffer);
+
+  image = gimp_create_image (gimp,
+                             gegl_buffer_get_width  (buffer),
+                             gegl_buffer_get_height (buffer),
+                             gimp_babl_format_get_base_type (format),
+                             gimp_babl_format_get_precision (format),
+                             FALSE);
+
+  layer = gimp_layer_new_from_buffer (buffer, image, format,
+                                      "Debug Image",
+                                      GIMP_OPACITY_OPAQUE,
+                                      GIMP_NORMAL_MODE);
+  gimp_image_add_layer (image, layer, NULL, -1, FALSE);
+
+  gimp_create_display (gimp, image, GIMP_UNIT_PIXEL, 1.0);
 }

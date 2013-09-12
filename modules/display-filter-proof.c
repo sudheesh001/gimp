@@ -19,7 +19,7 @@
 
 #include <glib.h>  /* lcms.h uses the "inline" keyword */
 
-#include <lcms.h>
+#include <lcms2.h>
 
 #include <gegl.h>
 #include <gtk/gtk.h>
@@ -69,7 +69,7 @@ enum
 };
 
 
-GType              cdisplay_proof_get_type        (void);
+static GType       cdisplay_proof_get_type        (void);
 
 static void        cdisplay_proof_finalize        (GObject          *object);
 static void        cdisplay_proof_get_property    (GObject          *object,
@@ -98,8 +98,10 @@ static const GimpModuleInfo cdisplay_proof_info =
   "November 14, 2003"
 };
 
+
 G_DEFINE_DYNAMIC_TYPE (CdisplayProof, cdisplay_proof,
                        GIMP_TYPE_COLOR_DISPLAY)
+
 
 G_MODULE_EXPORT const GimpModuleInfo *
 gimp_module_query (GTypeModule *module)
@@ -146,8 +148,6 @@ cdisplay_proof_class_init (CdisplayProofClass *klass)
   display_class->convert_surface = cdisplay_proof_convert_surface;
   display_class->configure       = cdisplay_proof_configure;
   display_class->changed         = cdisplay_proof_changed;
-
-  cmsErrorAction (LCMS_ERROR_IGNORE);
 }
 
 static void
@@ -299,9 +299,37 @@ cdisplay_proof_combo_box_set_active (GimpColorProfileComboBox *combo,
 
   if (profile)
     {
-      label = gimp_any_to_utf8 (cmsTakeProductDesc (profile), -1, NULL);
+      cmsUInt32Number  descSize;
+      gchar           *descData;
+
+      descSize = cmsGetProfileInfoASCII(profile, cmsInfoDescription,
+                                        "en", "US", NULL, 0);
+      if (descSize > 0)
+        {
+          descData = g_new (gchar, descSize + 1);
+          descSize = cmsGetProfileInfoASCII (profile, cmsInfoDescription,
+                                             "en", "US", descData, descSize);
+          if (descSize > 0)
+            label = gimp_any_to_utf8 (descData, -1, NULL);
+
+          g_free (descData);
+        }
+
       if (! label)
-        label = gimp_any_to_utf8 (cmsTakeProductName (profile), -1, NULL);
+        {
+          descSize = cmsGetProfileInfoASCII (profile, cmsInfoModel,
+                                             "en", "US", NULL, 0);
+          if (descSize > 0)
+            {
+              descData = g_new (gchar, descSize + 1);
+              descSize = cmsGetProfileInfoASCII (profile, cmsInfoModel,
+                                                 "en", "US", descData, descSize);
+              if (descSize > 0)
+                label = gimp_any_to_utf8 (descData, -1, NULL);
+
+              g_free (descData);
+            }
+        }
 
       cmsCloseProfile (profile);
     }
@@ -466,7 +494,7 @@ cdisplay_proof_changed (GimpColorDisplay *display)
 
   if (proofProfile)
     {
-      DWORD flags = cmsFLAGS_SOFTPROOFING;
+      cmsUInt32Number flags = cmsFLAGS_SOFTPROOFING;
 
       if (proof->bpc)
         flags |= cmsFLAGS_BLACKPOINTCOMPENSATION;

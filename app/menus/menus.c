@@ -125,6 +125,7 @@ menus_init (Gimp              *gimp,
                                       "help",
                                       "edit",
                                       "select",
+                                      "view",
                                       "image",
                                       "drawable",
                                       "layers",
@@ -144,6 +145,7 @@ menus_init (Gimp              *gimp,
                                       "context",
                                       "edit",
                                       "select",
+                                      "view",
                                       "image",
                                       "drawable",
                                       "layers",
@@ -455,7 +457,7 @@ menus_clear (Gimp    *gimp,
   filename = gimp_personal_rc_file ("menurc");
   source = g_build_filename (gimp_sysconf_directory (), "menurc", NULL);
 
-  if (gimp_config_file_copy (source, filename, NULL))
+  if (gimp_config_file_copy (source, filename, NULL, NULL, NULL))
     {
       menurc_deleted = TRUE;
     }

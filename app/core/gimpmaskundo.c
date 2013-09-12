@@ -97,8 +97,7 @@ gimp_mask_undo_constructed (GObject *object)
   GimpDrawable *drawable;
   gint          x1, y1, x2, y2;
 
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   g_assert (GIMP_IS_CHANNEL (GIMP_ITEM_UNDO (object)->item));
 
@@ -218,8 +217,8 @@ gimp_mask_undo_pop (GimpUndo            *undo,
       gint        width  = gimp_item_get_width  (GIMP_ITEM (channel));
       gint        height = gimp_item_get_height (GIMP_ITEM (channel));
 
-      buffer = gimp_gegl_buffer_new (GEGL_RECTANGLE (0, 0, width, height),
-                                     mask_undo->format);
+      buffer = gegl_buffer_new (GEGL_RECTANGLE (0, 0, width, height),
+                                mask_undo->format);
       gegl_buffer_clear (buffer, NULL);
 
       gimp_drawable_set_buffer (drawable, FALSE, NULL, buffer);

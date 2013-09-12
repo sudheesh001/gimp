@@ -19,7 +19,7 @@
 #define __GIMP_ITEM_H__
 
 
-#include "gimpviewable.h"
+#include "gimpfilter.h"
 
 
 #define GIMP_TYPE_ITEM            (gimp_item_get_type ())
@@ -34,23 +34,25 @@ typedef struct _GimpItemClass GimpItemClass;
 
 struct _GimpItem
 {
-  GimpViewable  parent_instance;
+  GimpFilter  parent_instance;
 };
 
 struct _GimpItemClass
 {
-  GimpViewableClass  parent_class;
+  GimpFilterClass  parent_class;
 
   /*  signals  */
-  void            (* removed)              (GimpItem             *item);
-  void            (* visibility_changed)   (GimpItem             *item);
-  void            (* linked_changed)       (GimpItem             *item);
-  void            (* lock_content_changed) (GimpItem             *item);
+  void            (* removed)               (GimpItem            *item);
+  void            (* visibility_changed)    (GimpItem            *item);
+  void            (* linked_changed)        (GimpItem            *item);
+  void            (* lock_content_changed)  (GimpItem            *item);
+  void            (* lock_position_changed) (GimpItem            *item);
 
   /*  virtual functions  */
   void            (* unset_removed)      (GimpItem               *item);
   gboolean        (* is_attached)        (const GimpItem         *item);
   gboolean        (* is_content_locked)  (const GimpItem         *item);
+  gboolean        (* is_position_locked) (const GimpItem         *item);
   GimpItemTree  * (* get_tree)           (GimpItem               *item);
   GimpItem      * (* duplicate)          (GimpItem               *item,
                                           GType                   new_type);
@@ -93,7 +95,6 @@ struct _GimpItemClass
                                           const GimpMatrix3      *matrix,
                                           GimpTransformDirection  direction,
                                           GimpInterpolationType   interpolation_type,
-                                          gint                    recursion_level,
                                           GimpTransformResize     clip_result,
                                           GimpProgress           *progress);
   gboolean        (* stroke)             (GimpItem               *item,
@@ -108,8 +109,6 @@ struct _GimpItemClass
                                           gboolean                feather,
                                           gdouble                 feather_radius_x,
                                           gdouble                 feather_radius_y);
-  GeglNode      * (* get_node)           (GimpItem               *item);
-
 
   const gchar *default_name;
   const gchar *rename_desc;
@@ -232,7 +231,6 @@ void            gimp_item_transform          (GimpItem           *item,
                                               const GimpMatrix3  *matrix,
                                               GimpTransformDirection direction,
                                               GimpInterpolationType interpolation_type,
-                                              gint                recursion_level,
                                               GimpTransformResize clip_result,
                                               GimpProgress       *progress);
 
@@ -251,9 +249,6 @@ void            gimp_item_to_selection       (GimpItem           *item,
                                               gboolean            feather,
                                               gdouble             feather_radius_x,
                                               gdouble             feather_radius_y);
-
-GeglNode      * gimp_item_get_node           (GimpItem           *item);
-GeglNode      * gimp_item_peek_node          (GimpItem           *item);
 
 void            gimp_item_add_offset_node    (GimpItem           *item,
                                               GeglNode           *node);
@@ -307,6 +302,13 @@ void            gimp_item_set_lock_content   (GimpItem           *item,
 gboolean        gimp_item_get_lock_content   (const GimpItem     *item);
 gboolean        gimp_item_can_lock_content   (const GimpItem     *item);
 gboolean        gimp_item_is_content_locked  (const GimpItem     *item);
+
+void            gimp_item_set_lock_position  (GimpItem          *item,
+                                              gboolean           lock_position,
+                                              gboolean           push_undo);
+gboolean        gimp_item_get_lock_position  (const GimpItem    *item);
+gboolean        gimp_item_can_lock_position  (const GimpItem    *item);
+gboolean        gimp_item_is_position_locked (const GimpItem    *item);
 
 gboolean        gimp_item_mask_bounds        (GimpItem           *item,
                                               gint               *x1,

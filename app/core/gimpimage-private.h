@@ -40,6 +40,7 @@ struct _GimpImagePrivate
   GimpPlugInProcedure *save_proc;           /*  last save procedure used     */
 
   gchar             *display_name;          /*  display basename             */
+  gchar             *display_path;          /*  display full path            */
   gint               width;                 /*  width in pixels              */
   gint               height;                /*  height in pixels             */
   gdouble            xresolution;           /*  image x-res, in dpi          */
@@ -67,6 +68,7 @@ struct _GimpImagePrivate
 
   GimpProjection    *projection;            /*  projection layers & channels */
   GeglNode          *graph;                 /*  GEGL projection graph        */
+  GeglNode          *visible_mask;          /*  component visibility node    */
 
   GList             *guides;                /*  guides                       */
   GimpGrid          *grid;                  /*  grid                         */
@@ -100,10 +102,7 @@ struct _GimpImagePrivate
   gint               group_count;           /*  nested undo groups           */
   GimpUndoType       pushing_undo_group;    /*  undo group status flag       */
 
-  /*  Preview  */
-  GimpTempBuf       *preview;               /*  the projection preview       */
-
-  /*  Signal emmision accumulator  */
+  /*  Signal emission accumulator  */
   GimpImageFlushAccumulator  flush_accum;
 };
 

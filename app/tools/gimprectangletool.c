@@ -34,10 +34,10 @@
 #include "core/gimp.h"
 #include "core/gimpchannel.h"
 #include "core/gimpcontext.h"
-#include "core/gimpimage-crop.h"
 #include "core/gimpimage.h"
 #include "core/gimpmarshal.h"
 #include "core/gimppickable.h"
+#include "core/gimppickable-auto-shrink.h"
 #include "core/gimptoolinfo.h"
 
 #include "widgets/gimpwidgets-utils.h"
@@ -108,7 +108,7 @@ struct _GimpRectangleToolPrivate
    * during gimp_rectangle_tool_button_press and then only read.
    */
 
-  /* Wether or not the rectangle currently being rubber-banded was
+  /* Whether or not the rectangle currently being rubber-banded was
    * created from scatch.
    */
   gboolean                is_new;
@@ -148,7 +148,7 @@ struct _GimpRectangleToolPrivate
    * TODO: Change the internal double-representation of the rectangle
    * to x,y width,height instead of x1,y1 x2,y2. That way we don't
    * need to keep a separate representation of the integer version of
-   * the rectangle; rounding width an height will yield consistant
+   * the rectangle; rounding width an height will yield consistent
    * results and not depend on position of the rectangle.
    */
   gint                    x1_int,    y1_int;
@@ -179,7 +179,7 @@ struct _GimpRectangleToolPrivate
   gint                    top_and_bottom_handle_w;
   gint                    left_and_right_handle_h;
 
-  /* Wether or not the rectangle is in a 'narrow situation' i.e. it is
+  /* Whether or not the rectangle is in a 'narrow situation' i.e. it is
    * too small for reasonable sized handle to be inside. In this case
    * we put handles on the outside.
    */
@@ -1296,7 +1296,7 @@ gimp_rectangle_tool_active_modifier_key (GimpTool        *tool,
 
           /* Only emit the rectangle-changed signal if the button is
            * not down. If it is down, the signal will and shall be
-           * emited on _button_release instead.
+           * emitted on _button_release instead.
            */
           if (! button1_down)
             {
@@ -2502,6 +2502,7 @@ gimp_rectangle_tool_auto_shrink (GimpRectangleTool *rect_tool)
   GimpRectangleToolPrivate *private = GIMP_RECTANGLE_TOOL_GET_PRIVATE (tool);
   GimpDisplay              *display = tool->display;
   GimpImage                *image;
+  GimpPickable             *pickable;
   gint                      offset_x = 0;
   gint                      offset_y = 0;
   gint                      x1, y1;
@@ -2523,34 +2524,34 @@ gimp_rectangle_tool_auto_shrink (GimpRectangleTool *rect_tool)
 
   if (shrink_merged)
     {
-      x1 = MAX (private->x1, 0);
-      y1 = MAX (private->y1, 0);
-      x2 = MIN (private->x2, gimp_image_get_width  (image));
-      y2 = MIN (private->y2, gimp_image_get_height (image));
+      pickable = GIMP_PICKABLE (gimp_image_get_projection (image));
+
+      x1 = private->x1;
+      y1 = private->y1;
+      x2 = private->x2;
+      y2 = private->y2;
     }
   else
     {
-      GimpDrawable *drawable = gimp_image_get_active_drawable (image);
-      GimpItem     *item     = GIMP_ITEM (drawable);
+      pickable = GIMP_PICKABLE (gimp_image_get_active_drawable (image));
 
-      if (! drawable)
+      if (! pickable)
         return;
 
-      gimp_item_get_offset (item, &offset_x, &offset_y);
+      gimp_item_get_offset (GIMP_ITEM (pickable), &offset_x, &offset_y);
 
-      x1 = MAX (private->x1 - offset_x, 0);
-      y1 = MAX (private->y1 - offset_y, 0);
-      x2 = MIN (private->x2 - offset_x, gimp_item_get_width  (item));
-      y2 = MIN (private->y2 - offset_y, gimp_item_get_height (item));
+      x1 = private->x1 - offset_x;
+      y1 = private->y1 - offset_y;
+      x2 = private->x2 - offset_x;
+      y2 = private->y2 - offset_y;
     }
 
-  if (gimp_image_crop_auto_shrink (image,
-                                   x1, y1, x2, y2,
-                                   ! shrink_merged,
-                                   &shrunk_x1,
-                                   &shrunk_y1,
-                                   &shrunk_x2,
-                                   &shrunk_y2))
+  if (gimp_pickable_auto_shrink (pickable,
+                                 x1, y1, x2, y2,
+                                 &shrunk_x1,
+                                 &shrunk_y1,
+                                 &shrunk_x2,
+                                 &shrunk_y2))
     {
       GimpRectangleFunction original_function = private->function;
 
@@ -4020,7 +4021,7 @@ gimp_rectangle_tool_apply_fixed_rule (GimpRectangleTool *rect_tool)
  * @min_y:
  * @max_x:
  * @max_y:          Pointers of where to put constraints. NULL allowed.
- * @constraint:     Wether to return image or layer constraints.
+ * @constraint:     Whether to return image or layer constraints.
  *
  * Calculates constraint coordinates for image or layer.
  */
@@ -4133,13 +4134,13 @@ gimp_rectangle_tool_update_int_rect (GimpRectangleTool *rect_tool)
 {
   GimpRectangleToolPrivate *priv = GIMP_RECTANGLE_TOOL_GET_PRIVATE (rect_tool);
 
-  priv->x1_int = ROUND (priv->x1);
-  priv->y1_int = ROUND (priv->y1);
+  priv->x1_int = SIGNED_ROUND (priv->x1);
+  priv->y1_int = SIGNED_ROUND (priv->y1);
 
   if (gimp_rectangle_tool_rect_rubber_banding_func (rect_tool))
     {
-      priv->width_int  = (gint) ROUND (priv->x2) - priv->x1_int;
-      priv->height_int = (gint) ROUND (priv->y2) - priv->y1_int;
+      priv->width_int  = (gint) SIGNED_ROUND (priv->x2) - priv->x1_int;
+      priv->height_int = (gint) SIGNED_ROUND (priv->y2) - priv->y1_int;
     }
 }
 

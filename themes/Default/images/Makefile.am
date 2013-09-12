@@ -49,7 +49,6 @@ STOCK_MENU_IMAGES = \
 	stock-display-filter-lcms-16.png		\
 	stock-display-filter-proof-16.png		\
 	stock-dynamics-16.png				\
-	stock-dynamics-22.png				\
 	stock-eye-12.png				\
 	stock-flip-horizontal-16.png			\
 	stock-flip-vertical-16.png			\
@@ -163,6 +162,7 @@ STOCK_BUTTON_IMAGES = \
 	stock-display-filter-lcms-24.png	\
 	stock-display-filter-proof-24.png	\
 	stock-duplicate-16.png			\
+	stock-dynamics-22.png			\
 	stock-edit-16.png			\
 	stock-eye-20.png			\
 	stock-floating-selection-24.png		\
@@ -347,6 +347,10 @@ STOCK_TOOL_IMAGES = \
 	tools/stock-tool-text-22.png			\
 	tools/stock-tool-threshold-16.png		\
 	tools/stock-tool-threshold-22.png		\
+	tools/stock-tool-unified-transform-16.png	\
+	tools/stock-tool-unified-transform-22.png	\
+	tools/stock-tool-warp-16.png			\
+	tools/stock-tool-warp-22.png			\
 	tools/stock-tool-zoom-16.png			\
 	tools/stock-tool-zoom-22.png
 
@@ -380,7 +384,7 @@ CLEANFILES = $(noinst_DATA) stock-icons.list
 
 
 stock-icons.list: $(STOCK_IMAGES) Makefile.am
-	( rm -f $@; \
+	$(AM_V_GEN) ( rm -f $@; \
           for image in $(STOCK_IMAGES); do \
             echo $$image | \
               sed -e 's|.*/||' -e 's|-|_|g' -e 's|\.png$$||' >> $@; \
@@ -388,7 +392,7 @@ stock-icons.list: $(STOCK_IMAGES) Makefile.am
 	  done )
 
 gimp-core-pixbufs.h: $(CORE_IMAGES) Makefile.am
-	$(GDK_PIXBUF_CSOURCE) --raw --build-list $(CORE_VARIABLES) > $(@F)
+	$(AM_V_GEN) $(GDK_PIXBUF_CSOURCE) --raw --build-list $(CORE_VARIABLES) > $(@F)
 
 gimp-stock-pixbufs.h: stock-icons.list
-	$(GDK_PIXBUF_CSOURCE) --raw --build-list `cat $<` > $(@F)
+	$(AM_V_GEN) $(GDK_PIXBUF_CSOURCE) --raw --build-list `cat $<` > $(@F)

@@ -170,7 +170,8 @@ GType gimp_foreground_extract_mode_get_type (void) G_GNUC_CONST;
 
 typedef enum
 {
-  GIMP_FOREGROUND_EXTRACT_SIOX
+  GIMP_FOREGROUND_EXTRACT_SIOX,
+  GIMP_FOREGROUND_EXTRACT_MATTING 
 } GimpForegroundExtractMode;
 
 
@@ -256,8 +257,9 @@ typedef enum
   GIMP_INTERPOLATION_NONE,   /*< desc="None"   >*/
   GIMP_INTERPOLATION_LINEAR, /*< desc="Linear" >*/
   GIMP_INTERPOLATION_CUBIC,  /*< desc="Cubic"  >*/
+  GIMP_INTERPOLATION_NOHALO, /*< desc="NoHalo" >*/
   GIMP_INTERPOLATION_LOHALO, /*< desc="LoHalo" >*/
-  GIMP_INTERPOLATION_LANCZOS = GIMP_INTERPOLATION_LOHALO /*< skip */
+  GIMP_INTERPOLATION_LANCZOS = GIMP_INTERPOLATION_NOHALO /*< skip */
 } GimpInterpolationType;
 
 

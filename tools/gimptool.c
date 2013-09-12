@@ -127,7 +127,7 @@ one_line_output (const gchar *program,
 {
   gchar *command = g_strconcat (program, " ", args, NULL);
   FILE  *pipe    = popen (command, "r");
-  gchar  line[1000];
+  gchar  line[4096];
 
   if (pipe == NULL)
     {
@@ -263,7 +263,8 @@ find_out_env_flags (void)
   else
     env_cc = CC;
 
-  if (g_ascii_strncasecmp (env_cc, "cl", 2) == 0)
+  if (g_ascii_strncasecmp (env_cc, "cl", 2)    == 0 &&
+      g_ascii_strncasecmp (env_cc, "clang", 5) != 0)
     msvc_syntax = TRUE;
 
   if ((p = getenv ("CFLAGS")) != NULL)
@@ -528,8 +529,7 @@ do_build_nogimpui (const gchar *what)
 static gchar *
 get_user_plugin_dir (void)
 {
-  return g_build_filename (g_get_home_dir (),
-                           GIMPDIR,
+  return g_build_filename (gimp_directory (),
                            "plug-ins",
                            NULL);
 }
@@ -555,6 +555,7 @@ do_install_nogimpui (const gchar *what)
 static gchar *
 get_sys_plugin_dir (gboolean forward_slashes)
 {
+#ifdef G_OS_WIN32
   const gchar *rprefix;
 
   rprefix = get_runtime_prefix (forward_slashes ? '/' : G_DIR_SEPARATOR);
@@ -565,6 +566,14 @@ get_sys_plugin_dir (gboolean forward_slashes)
                        GIMP_PLUGIN_VERSION,
                        "plug-ins",
                        NULL);
+#else
+  return g_build_path (forward_slashes ? "/" : G_DIR_SEPARATOR_S,
+                       LIBDIR,
+                       "gimp",
+                       GIMP_PLUGIN_VERSION,
+                       "plug-ins",
+                       NULL);
+#endif
 }
 
 static void
@@ -644,8 +653,7 @@ do_uninstall_admin_bin (const gchar *what)
 static gchar *
 get_user_script_dir (void)
 {
-  return g_build_filename (g_get_home_dir (),
-                           GIMPDIR,
+  return g_build_filename (gimp_directory (),
                            "scripts",
                            NULL);
 }

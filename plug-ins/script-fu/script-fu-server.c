@@ -56,6 +56,10 @@ typedef short sa_family_t;	/* Not defined by winsock */
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+
+#ifndef AI_ADDRCONFIG
+#define AI_ADDRCONFIG 0
+#endif
 #endif
 
 #include <glib/gstdio.h>
@@ -224,6 +228,7 @@ script_fu_server_run (const gchar      *name,
   run_mode = params[0].data.d_int32;
 
   ts_set_run_mode (run_mode);
+  ts_set_print_flag (1);
 
   switch (run_mode)
     {
@@ -550,13 +555,15 @@ execute_command (SFCommand *cmd)
   if (ts_interpret_string (cmd->command) != 0)
     {
       error = TRUE;
+
       server_log ("%s\n", response->str);
     }
   else
     {
       error = FALSE;
 
-      g_string_assign (response, ts_get_success_msg ());
+      if (response->len == 0)
+        g_string_assign (response, ts_get_success_msg ());
 
       time (&clock2);
       server_log ("Request #%d processed in %f seconds, finishing on %s",

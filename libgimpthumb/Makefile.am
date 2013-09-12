@@ -46,13 +46,11 @@ libgimpthumbincludedir = $(includedir)/gimp-$(GIMP_API_VERSION)/libgimpthumb
 
 AM_CPPFLAGS = \
 	-DG_LOG_DOMAIN=\"LibGimpThumb\"	\
-	-DGIMP_THUMB_COMPILATION
-
-INCLUDES = \
-	-I$(top_srcdir)		\
-	$(GDK_PIXBUF_CFLAGS)	\
-	$(GLIB_CFLAGS)		\
-	-I$(includedir)		\
+	-DGIMP_THUMB_COMPILATION	\
+	-I$(top_srcdir)			\
+	$(GDK_PIXBUF_CFLAGS)		\
+	$(GIO_CFLAGS)			\
+	-I$(includedir)			\
 	$(xobjective_c)
 
 EXTRA_DIST = \
@@ -88,7 +86,7 @@ libgimpthumb_@GIMP_API_VERSION@_la_LDFLAGS = \
 
 libgimpthumb_@GIMP_API_VERSION@_la_LIBADD = \
 	$(GDK_PIXBUF_LIBS)	\
-	$(GLIB_LIBS) 
+	$(GIO_LIBS) 
 
 
 noinst_PROGRAMS = gimp-thumbnail-list
@@ -98,7 +96,7 @@ gimp_thumbnail_list_SOURCES = gimp-thumbnail-list.c
 gimp_thumbnail_list_LDADD = \
 	libgimpthumb-$(GIMP_API_VERSION).la \
 	$(GDK_PIXBUF_LIBS) \
-	$(GLIB_LIBS)
+	$(GIO_LIBS)
 
 
 install-data-local: install-ms-lib install-libtool-import-lib

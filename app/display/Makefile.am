@@ -1,15 +1,13 @@
 ## Process this file with automake to produce Makefile.in
 
 AM_CPPFLAGS = \
-	-DG_LOG_DOMAIN=\"Gimp-Display\"
-
-INCLUDES = \
-	-I$(top_builddir)	\
-	-I$(top_srcdir)		\
-	-I$(top_builddir)/app	\
-	-I$(top_srcdir)/app	\
-	$(GEGL_CFLAGS)		\
-	$(GTK_CFLAGS)		\
+	-DG_LOG_DOMAIN=\"Gimp-Display\"	\
+	-I$(top_builddir)		\
+	-I$(top_srcdir)			\
+	-I$(top_builddir)/app		\
+	-I$(top_srcdir)/app		\
+	$(GEGL_CFLAGS)			\
+	$(GTK_CFLAGS)			\
 	-I$(includedir)
 
 noinst_LIBRARIES = libappdisplay.a
@@ -19,6 +17,8 @@ libappdisplay_a_sources = \
 	display-types.h				\
 	gimpcanvas.c				\
 	gimpcanvas.h				\
+	gimpcanvas-style.c			\
+	gimpcanvas-style.h			\
 	gimpcanvasarc.c				\
 	gimpcanvasarc.h				\
 	gimpcanvasboundary.c			\
@@ -111,6 +111,10 @@ libappdisplay_a_sources = \
 	gimpdisplayshell-progress.h		\
 	gimpdisplayshell-render.c		\
 	gimpdisplayshell-render.h		\
+	gimpdisplayshell-rotate.c		\
+	gimpdisplayshell-rotate.h		\
+	gimpdisplayshell-rotate-dialog.c	\
+	gimpdisplayshell-rotate-dialog.h	\
 	gimpdisplayshell-scale.c		\
 	gimpdisplayshell-scale.h		\
 	gimpdisplayshell-scale-dialog.c		\
@@ -119,14 +123,14 @@ libappdisplay_a_sources = \
 	gimpdisplayshell-scroll.h		\
 	gimpdisplayshell-selection.c		\
 	gimpdisplayshell-selection.h		\
-	gimpdisplayshell-style.c		\
-	gimpdisplayshell-style.h		\
 	gimpdisplayshell-title.c		\
 	gimpdisplayshell-title.h		\
 	gimpdisplayshell-tool-events.c		\
 	gimpdisplayshell-tool-events.h		\
 	gimpdisplayshell-transform.c		\
 	gimpdisplayshell-transform.h		\
+	gimpdisplayxfer.c			\
+	gimpdisplayxfer.h			\
 	gimpimagewindow.c			\
 	gimpimagewindow.h			\
 	gimpmotionbuffer.c			\
@@ -142,7 +146,9 @@ libappdisplay_a_sources = \
 	gimpstatusbar.c				\
 	gimpstatusbar.h				\
 	gimptooldialog.c			\
-	gimptooldialog.h
+	gimptooldialog.h			\
+	gimptoolgui.c				\
+	gimptoolgui.h
 
 libappdisplay_a_built_sources = display-enums.c
 

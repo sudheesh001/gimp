@@ -406,6 +406,9 @@ gimp_container_view_real_set_container (GimpContainerView *view,
 
   if (private->container)
     {
+      if (private->context)
+        gimp_container_view_disconnect_context (view);
+
       gimp_container_view_select_item (view, NULL);
 
       /* freeze/thaw is only supported for the toplevel container */
@@ -418,9 +421,6 @@ gimp_container_view_real_set_container (GimpContainerView *view,
 
       if (! gimp_container_frozen (private->container))
         gimp_container_view_remove_container (view, private->container);
-
-      if (private->context)
-        gimp_container_view_disconnect_context (view);
     }
 
   private->container = container;
@@ -1075,14 +1075,10 @@ gimp_container_view_remove_container (GimpContainerView *view,
   GimpContainerViewInterface *view_iface;
   GimpContainerViewPrivate   *private;
 
+  g_object_ref (container);
+
   view_iface = GIMP_CONTAINER_VIEW_GET_INTERFACE (view);
   private    = GIMP_CONTAINER_VIEW_GET_PRIVATE (view);
-
-  if (container == private->container)
-    {
-      gimp_tree_handler_disconnect (private->name_changed_handler);
-      private->name_changed_handler = NULL;
-    }
 
   g_signal_handlers_disconnect_by_func (container,
                                         gimp_container_view_add,
@@ -1094,6 +1090,12 @@ gimp_container_view_remove_container (GimpContainerView *view,
                                         gimp_container_view_reorder,
                                         view);
 
+  if (container == private->container)
+    {
+      gimp_tree_handler_disconnect (private->name_changed_handler);
+      private->name_changed_handler = NULL;
+    }
+
   if (! view_iface->model_is_tree && container == private->container)
     {
       gimp_container_view_clear_items (view);
@@ -1104,6 +1106,8 @@ gimp_container_view_remove_container (GimpContainerView *view,
                               (GFunc) gimp_container_view_remove_foreach,
                               view);
     }
+
+  g_object_unref (container);
 }
 
 static void

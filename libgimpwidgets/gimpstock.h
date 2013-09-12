@@ -138,10 +138,13 @@ G_BEGIN_DECLS
 #define GIMP_STOCK_TOOL_RECT_SELECT         "gimp-tool-rect-select"
 #define GIMP_STOCK_TOOL_ROTATE              "gimp-tool-rotate"
 #define GIMP_STOCK_TOOL_SCALE               "gimp-tool-scale"
+#define GIMP_STOCK_TOOL_SEAMLESS_CLONE      "gimp-tool-seamless-clone"
 #define GIMP_STOCK_TOOL_SHEAR               "gimp-tool-shear"
 #define GIMP_STOCK_TOOL_SMUDGE              "gimp-tool-smudge"
 #define GIMP_STOCK_TOOL_TEXT                "gimp-tool-text"
 #define GIMP_STOCK_TOOL_THRESHOLD           "gimp-tool-threshold"
+#define GIMP_STOCK_TOOL_UNIFIED_TRANSFORM   "gimp-tool-unified-transform"
+#define GIMP_STOCK_TOOL_WARP                "gimp-tool-warp"
 #define GIMP_STOCK_TOOL_ZOOM                "gimp-tool-zoom"
 
 
@@ -284,6 +287,7 @@ G_BEGIN_DECLS
 #define GIMP_STOCK_PALETTE                  GTK_STOCK_SELECT_COLOR
 #define GIMP_STOCK_PATTERN                  GIMP_STOCK_TOOL_BUCKET_FILL
 #define GIMP_STOCK_CONTROLLER_MOUSE         GIMP_STOCK_CURSOR
+#define GIMP_STOCK_CONVERT_PRECISION        GIMP_STOCK_CONVERT_RGB
 
 
 void   gimp_stock_init (void);

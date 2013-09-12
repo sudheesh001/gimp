@@ -18,7 +18,7 @@
 
 /*
  * The dicom reading and writing code was written from scratch
- * by Dov Grobgeld.  (dov@imagic.weizman.ac.il).
+ * by Dov Grobgeld.  (dov.grobgeld@gmail.com).
  */
 
 #include "config.h"
@@ -74,7 +74,7 @@ static gboolean  save_image            (const gchar      *filename,
                                         GError          **error);
 static void      dicom_loader          (guint8           *pix_buf,
                                         DicomInfo        *info,
-                                        GimpPixelRgn     *pixel_rgn);
+                                        GeglBuffer       *buffer);
 static void      guess_and_set_endian2 (guint16          *buf16,
                                         gint              length);
 static void      toggle_endian2        (guint16          *buf16,
@@ -188,6 +188,7 @@ run (const gchar      *name,
   GError            *error  = NULL;
 
   INIT_I18N ();
+  gegl_init (NULL, NULL);
 
   run_mode = param[0].data.d_int32;
 
@@ -313,10 +314,9 @@ static gint32
 load_image (const gchar  *filename,
             GError      **error)
 {
-  GimpPixelRgn    pixel_rgn;
   gint32 volatile image_ID          = -1;
   gint32          layer_ID;
-  GimpDrawable   *drawable;
+  GeglBuffer     *buffer;
   GSList         *elements          = NULL;
   FILE           *DICOM;
   gchar           buf[500];    /* buffer for random things like scanning */
@@ -616,16 +616,14 @@ load_image (const gchar  *filename,
                              100, GIMP_NORMAL_MODE);
   gimp_image_insert_layer (image_ID, layer_ID, -1, 0);
 
-  drawable = gimp_drawable_get (layer_ID);
-  gimp_pixel_rgn_init (&pixel_rgn, drawable,
-                       0, 0, drawable->width, drawable->height, TRUE, FALSE);
+  buffer = gimp_drawable_get_buffer (layer_ID);
 
 #if GUESS_ENDIAN
   if (bpp == 16)
     guess_and_set_endian2 ((guint16 *) pix_buf, width * height);
 #endif
 
-  dicom_loader (pix_buf, dicominfo, &pixel_rgn);
+  dicom_loader (pix_buf, dicominfo, buffer);
 
   if (elements)
     {
@@ -643,15 +641,15 @@ load_image (const gchar  *filename,
 
   fclose (DICOM);
 
-  gimp_drawable_detach (drawable);
+  g_object_unref (buffer);
 
   return image_ID;
 }
 
 static void
-dicom_loader (guint8       *pix_buffer,
-              DicomInfo    *info,
-              GimpPixelRgn *pixel_rgn)
+dicom_loader (guint8     *pix_buffer,
+              DicomInfo  *info,
+              GeglBuffer *buffer)
 {
   guchar  *data;
   gint     row_idx;
@@ -750,13 +748,17 @@ dicom_loader (guint8       *pix_buffer,
           d += width * samples_per_pixel;
         }
 
-      gimp_progress_update ((gdouble) row_idx / (gdouble) height);
-      gimp_pixel_rgn_set_rect (pixel_rgn, data, 0, row_idx, width, scanlines);
+      gegl_buffer_set (buffer, GEGL_RECTANGLE (0, row_idx, width, scanlines), 0,
+                       NULL, data, GEGL_AUTO_ROWSTRIDE);
+
       row_idx += scanlines;
+
+      gimp_progress_update ((gdouble) row_idx / (gdouble) height);
     }
-  gimp_progress_update (1.0);
 
   g_free (data);
+
+  gimp_progress_update (1.0);
 }
 
 
@@ -1125,18 +1127,12 @@ dicom_get_elements_list (gint32 image_ID)
                   gimp_parasite_free (parasite);
                 }
             }
-
-          /* make sure we free each individual parasite name, in
-           * addition to the array of names
-           */
-          g_free (parasites[i]);
         }
     }
+
   /* cleanup the array of names */
-  if (parasites)
-    {
-      g_free (parasites);
-    }
+  g_strfreev (parasites);
+
   return elements;
 }
 
@@ -1222,12 +1218,17 @@ dicom_ensure_required_elements_present (GSList *elements,
     /* 0002, 0001 - File Meta Information Version */
     { 0x0002, 0x0001, "OB", 2, (guint8 *) "\0\1" },
     /* 0002, 0010 - Transfer syntax uid */
-    { 0x0002, 0x0001, "UI",
+    { 0x0002, 0x0010, "UI",
       strlen ("1.2.840.10008.1.2.1"), (guint8 *) "1.2.840.10008.1.2.1"},
     /* 0002, 0013 - Implementation version name */
     { 0x0002, 0x0013, "SH",
       strlen ("GIMP Dicom Plugin 1.0"), (guint8 *) "GIMP Dicom Plugin 1.0" },
     /* Identifying group */
+    /* ImageType */
+    { 0x0008, 0x0008, "CS",
+      strlen ("ORIGINAL\\PRIMARY"), (guint8 *) "ORIGINAL\\PRIMARY" },
+    { 0x0008, 0x0016, "UI",
+      strlen ("1.2.840.10008.5.1.4.1.1.7"), (guint8 *) "1.2.840.10008.5.1.4.1.1.7" },
     /* Study date */
     { 0x0008, 0x0020, "DA",
       strlen (today_string), (guint8 *) today_string },
@@ -1240,14 +1241,23 @@ dicom_ensure_required_elements_present (GSList *elements,
     /* Content Date */
     { 0x0008, 0x0023, "DA",
       strlen (today_string), (guint8 *) today_string},
-    /* Modality - I have to add something.. */
+    /* Content Time */
+    { 0x0008, 0x0030, "TM",
+      strlen ("000000.000000"), (guint8 *) "000000.000000"},
+    /* AccessionNumber */
+    { 0x0008, 0x0050, "SH", strlen (""), (guint8 *) "" },
+    /* Modality */
     { 0x0008, 0x0060, "CS", strlen ("MR"), (guint8 *) "MR" },
+    /* ConversionType */
+    { 0x0008, 0x0064, "CS", strlen ("WSD"), (guint8 *) "WSD" },
+    /* ReferringPhysiciansName */
+    { 0x0008, 0x0090, "PN", strlen (""), (guint8 *) "" },
     /* Patient group */
     /* Patient name */
     { 0x0010,  0x0010, "PN",
       strlen ("DOE^WILBER"), (guint8 *) "DOE^WILBER" },
     /* Patient ID */
-    { 0x0010,  0x0020, "CS",
+    { 0x0010,  0x0020, "LO",
       strlen ("314159265"), (guint8 *) "314159265" },
     /* Patient Birth date */
     { 0x0010,  0x0030, "DA",
@@ -1255,6 +1265,12 @@ dicom_ensure_required_elements_present (GSList *elements,
     /* Patient sex */
     { 0x0010,  0x0040, "CS", strlen (""), (guint8 *) "" /* unknown */ },
     /* Relationship group */
+    /* StudyId */
+    { 0x0020, 0x0010, "IS", strlen ("1"), (guint8 *) "1" },
+    /* SeriesNumber */
+    { 0x0020, 0x0011, "IS", strlen ("1"), (guint8 *) "1" },
+    /* AcquisitionNumber */
+    { 0x0020, 0x0012, "IS", strlen ("1"), (guint8 *) "1" },
     /* Instance number */
     { 0x0020, 0x0013, "IS", strlen ("1"), (guint8 *) "1" },
 
@@ -1295,8 +1311,10 @@ save_image (const gchar  *filename,
 {
   FILE          *DICOM;
   GimpImageType  drawable_type;
-  GimpDrawable  *drawable;
-  GimpPixelRgn   pixel_rgn;
+  GeglBuffer    *buffer;
+  const Babl    *format;
+  gint           width;
+  gint           height;
   GByteArray    *group_stream;
   GSList        *elements = NULL;
   gint           group;
@@ -1311,7 +1329,6 @@ save_image (const gchar  *filename,
   guchar        *src = NULL;
 
   drawable_type = gimp_drawable_type (drawable_ID);
-  drawable = gimp_drawable_get (drawable_ID);
 
   /*  Make sure we're not saving an image with an alpha channel  */
   if (gimp_drawable_has_alpha (drawable_ID))
@@ -1323,13 +1340,17 @@ save_image (const gchar  *filename,
   switch (drawable_type)
     {
     case GIMP_GRAY_IMAGE:
+      format = babl_format ("Y' u8");
       samples_per_pixel = 1;
       photometric_interp = "MONOCHROME2";
       break;
+
     case GIMP_RGB_IMAGE:
+      format = babl_format ("R'G'B' u8");
       samples_per_pixel = 3;
       photometric_interp = "RGB";
       break;
+
     default:
       g_message (_("Cannot operate on unknown image types."));
       return FALSE;
@@ -1346,12 +1367,16 @@ save_image (const gchar  *filename,
 
   if (!DICOM)
     {
-      gimp_drawable_detach (drawable);
       g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (errno),
                    _("Could not open '%s' for writing: %s"),
                    gimp_filename_to_utf8 (filename), g_strerror (errno));
       return FALSE;
     }
+
+  buffer = gimp_drawable_get_buffer (drawable_ID);
+
+  width  = gegl_buffer_get_width  (buffer);
+  height = gegl_buffer_get_height (buffer);
 
   /* Print dicom header */
   {
@@ -1395,10 +1420,10 @@ save_image (const gchar  *filename,
                                       (guint8 *) &zero);
   /* rows */
   elements = dicom_add_element_int (elements, group, 0x0010, "US",
-                                    (guint8 *) &(drawable->height));
+                                    (guint8 *) &height);
   /* columns */
   elements = dicom_add_element_int (elements, group, 0x0011, "US",
-                                    (guint8 *) &(drawable->width));
+                                    (guint8 *) &width);
   /* Bits allocated */
   elements = dicom_add_element_int (elements, group, 0x0100, "US",
                                     (guint8 *) &eight);
@@ -1414,18 +1439,15 @@ save_image (const gchar  *filename,
 
   /* Pixel data */
   group = 0x7fe0;
-  src = g_new (guchar,
-               drawable->height * drawable->width * samples_per_pixel);
+  src = g_new (guchar, height * width * samples_per_pixel);
   if (src)
     {
-      gimp_pixel_rgn_init (&pixel_rgn, drawable,
-                           0, 0, drawable->width, drawable->height,
-                           FALSE, FALSE);
-      gimp_pixel_rgn_get_rect (&pixel_rgn,
-                               src, 0, 0, drawable->width, drawable->height);
+      gegl_buffer_get (buffer, GEGL_RECTANGLE (0, 0, width, height), 1.0,
+                       format, src,
+                       GEGL_AUTO_ROWSTRIDE, GEGL_ABYSS_NONE);
+
       elements = dicom_add_element (elements, group, 0x0010, "OW",
-                                    drawable->width * drawable->height *
-                                    samples_per_pixel,
+                                    width * height * samples_per_pixel,
                                     (guint8 *) src);
 
       elements = dicom_add_tags (DICOM, group_stream, elements);
@@ -1441,7 +1463,7 @@ save_image (const gchar  *filename,
 
   dicom_elements_destroy (elements);
   g_byte_array_free (group_stream, TRUE);
-  gimp_drawable_detach (drawable);
+  g_object_unref (buffer);
 
   return retval;
 }
@@ -1574,7 +1596,7 @@ add_tag_pointer (GByteArray   *group_stream,
         */
       if (strstr ("UI|OB", value_rep) != NULL)
         {
-          g_byte_array_append (group_stream, (guint8 *) 0x0000, 1);
+          g_byte_array_append (group_stream, (guint8 *) "\0", 1);
         }
       else
         {

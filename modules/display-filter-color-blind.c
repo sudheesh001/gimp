@@ -114,7 +114,7 @@ enum
 };
 
 
-GType              cdisplay_colorblind_get_type        (void);
+static GType       cdisplay_colorblind_get_type        (void);
 
 static void        cdisplay_colorblind_set_property    (GObject               *object,
                                                         guint                  property_id,
@@ -506,7 +506,7 @@ cdisplay_colorblind_changed (GimpColorDisplay *display)
   gfloat              anchor_e[3];
   gfloat              anchor[12];
 
-  /*  This function performs initialisations that are dependant
+  /*  This function performs initialisations that are dependent
    *  on the type of color deficiency.
    */
 

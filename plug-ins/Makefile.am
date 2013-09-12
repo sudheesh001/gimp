@@ -4,6 +4,10 @@ if HAVE_WEBKIT
 help_browser = help-browser
 endif
 
+if HAVE_OPENEXR
+file_exr = file-exr
+endif
+
 if BUILD_JPEG
 file_jpeg = file-jpeg
 file_psd = file-psd
@@ -27,7 +31,9 @@ endif
 
 if HAVE_Z
 if HAVE_BZIP2
+if HAVE_LIBLZMA
 file_compressor = file-compressor
+endif
 endif
 endif
 
@@ -45,10 +51,6 @@ else
 file_uri = file-uri
 endif
 
-if BUILD_XJT
-file_xjt = file-xjt
-endif
-
 if HAVE_LIBEXIF
 metadata = metadata
 endif
@@ -60,6 +62,7 @@ SUBDIRS = \
 	color-rotate		\
 	file-bmp		\
 	$(file_compressor)	\
+	$(file_exr)		\
 	file-faxg3		\
 	file-fits		\
 	file-fli		\
@@ -68,7 +71,6 @@ SUBDIRS = \
 	$(file_psd)		\
 	file-sgi		\
 	$(file_uri)		\
-	$(file_xjt)		\
 	flame			\
 	fractal-explorer	\
 	gfig			\

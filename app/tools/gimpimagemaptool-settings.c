@@ -33,11 +33,12 @@
 
 #include "core/gimp.h"
 #include "core/gimpcontext.h"
-#include "core/gimpimagemapconfig.h"
 #include "core/gimplist.h"
 #include "core/gimptoolinfo.h"
 
 #include "widgets/gimpsettingsbox.h"
+
+#include "display/gimptoolgui.h"
 
 #include "gimpimagemapoptions.h"
 #include "gimpimagemaptool.h"
@@ -171,7 +172,7 @@ gimp_image_map_tool_settings_import (GimpSettingsBox  *box,
   if (! tool_class->settings_import (tool, filename, &error))
     {
       gimp_message_literal (GIMP_TOOL (tool)->tool_info->gimp,
-			    G_OBJECT (tool->dialog),
+			    G_OBJECT (gimp_tool_gui_get_dialog (tool->gui)),
 			    GIMP_MESSAGE_ERROR, error->message);
       g_clear_error (&error);
 
@@ -201,7 +202,7 @@ gimp_image_map_tool_settings_export (GimpSettingsBox  *box,
   if (! tool_class->settings_export (tool, filename, &error))
     {
       gimp_message_literal (GIMP_TOOL (tool)->tool_info->gimp,
-			    G_OBJECT (tool->dialog),
+			    G_OBJECT (gimp_tool_gui_get_dialog (tool->gui)),
 			    GIMP_MESSAGE_ERROR, error->message);
       g_clear_error (&error);
 

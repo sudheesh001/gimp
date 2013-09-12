@@ -32,6 +32,8 @@
 
 #include "widgets/gimphelp-ids.h"
 
+#include "display/gimptoolgui.h"
+
 #include "gimpsheartool.h"
 #include "gimptoolcontrol.h"
 #include "gimptransformoptions.h"
@@ -123,11 +125,10 @@ gimp_shear_tool_dialog (GimpTransformTool *tr_tool)
   GtkWidget     *button;
 
   table = gtk_table_new (2, 2, FALSE);
-  gtk_container_set_border_width (GTK_CONTAINER (table), 6);
   gtk_table_set_row_spacings (GTK_TABLE (table), 2);
   gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-  gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (tr_tool->dialog))),
-                      table, FALSE, FALSE, 0);
+  gtk_box_pack_start (GTK_BOX (gimp_tool_gui_get_vbox (tr_tool->gui)), table,
+                      FALSE, FALSE, 0);
   gtk_widget_show (table);
 
   button = gimp_spin_button_new ((GtkObject **) &shear->x_adj,
@@ -282,6 +283,8 @@ shear_x_mag_changed (GtkAdjustment     *adj,
 
       tr_tool->trans_info[XSHEAR] = value;
 
+      gimp_transform_tool_push_internal_undo (tr_tool);
+
       gimp_transform_tool_recalc_matrix (tr_tool);
 
       gimp_draw_tool_resume (GIMP_DRAW_TOOL (tr_tool));
@@ -302,6 +305,8 @@ shear_y_mag_changed (GtkAdjustment     *adj,
         tr_tool->trans_info[HORZ_OR_VERT] = GIMP_ORIENTATION_VERTICAL;
 
       tr_tool->trans_info[YSHEAR] = value;
+
+      gimp_transform_tool_push_internal_undo (tr_tool);
 
       gimp_transform_tool_recalc_matrix (tr_tool);
 

@@ -27,7 +27,6 @@
 #include <string.h>
 
 #include <librsvg/rsvg.h>
-#include <librsvg/librsvg-features.h>  /* for version check */
 
 #include "libgimp/gimp.h"
 #include "libgimp/gimpui.h"
@@ -186,9 +185,6 @@ run (const gchar      *name,
 
   values[0].type          = GIMP_PDB_STATUS;
   values[0].data.d_status = GIMP_PDB_EXECUTION_ERROR;
-
-  /* MUST call this before any RSVG funcs */
-  g_type_init ();
 
   if (strcmp (name, LOAD_PROC) == 0)
     {
@@ -482,7 +478,7 @@ static GtkWidget *size_label = NULL;
 
 /*  This function retrieves the pixel size from an SVG file. Parsing
  *  stops after the first chunk that provided the parser with enough
- *  information to determine the size. This is usally the opening
+ *  information to determine the size. This is usually the opening
  *  <svg> element and should thus be in the first chunk (1024 bytes).
  */
 static gboolean

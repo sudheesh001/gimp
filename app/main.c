@@ -41,11 +41,11 @@
 #include <gdk/gdk.h>
 #endif
 
+#include <babl/babl.h>
+
 #include "libgimpbase/gimpbase.h"
 
 #include "pdb/pdb-types.h"
-
-#include "base/tile.h"
 
 #include "config/gimpconfig-dump.h"
 
@@ -596,6 +596,7 @@ gimp_option_dump_gimprc (const gchar  *option_name,
       gimp = g_object_new (GIMP_TYPE_GIMP, NULL);
 
       units_init (gimp);
+      babl_init ();
 
       success = gimp_config_dump (format);
 
@@ -688,7 +689,9 @@ gimp_init_malloc (void)
    * An alternative to tuning this parameter would be to use
    * malloc_trim(), for example after releasing a large tile-manager.
    */
+#if 0
   mallopt (M_MMAP_THRESHOLD, TILE_WIDTH * TILE_HEIGHT);
+#endif
 #endif
 }
 

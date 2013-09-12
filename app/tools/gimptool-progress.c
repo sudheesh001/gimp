@@ -20,6 +20,7 @@
 
 #include "config.h"
 
+#include <gegl.h>
 #include <gtk/gtk.h>
 
 #include "tools-types.h"
@@ -34,7 +35,6 @@
 #include "display/gimpdisplayshell.h"
 #include "display/gimpdisplayshell-items.h"
 #include "display/gimpdisplayshell-transform.h"
-#include "display/gimpdisplayshell-style.h"
 
 #include "gimptool.h"
 #include "gimptool-progress.h"
@@ -85,19 +85,22 @@ gimp_tool_progress_start (GimpProgress *progress,
 {
   GimpTool         *tool = GIMP_TOOL (progress);
   GimpDisplayShell *shell;
-  gint              x, y, w, h;
+  gint              x, y;
 
   g_return_val_if_fail (GIMP_IS_DISPLAY (tool->display), NULL);
   g_return_val_if_fail (tool->progress == NULL, NULL);
 
   shell = gimp_display_get_shell (tool->display);
 
-  gimp_display_shell_untransform_viewport (shell, &x, &y, &w, &h);
+  x = shell->disp_width  / 2;
+  y = shell->disp_height / 2;
+
+  gimp_display_shell_unzoom_xy (shell, x, y, &x, &y, FALSE);
 
   tool->progress = gimp_canvas_progress_new (shell,
                                              GIMP_HANDLE_ANCHOR_CENTER,
-                                             x + w / 2, y + h / 2);
-  gimp_display_shell_add_tool_item (shell, tool->progress);
+                                             x, y);
+  gimp_display_shell_add_unrotated_item (shell, tool->progress);
   g_object_unref (tool->progress);
 
   gimp_progress_start (GIMP_PROGRESS (tool->progress),
@@ -119,7 +122,7 @@ gimp_tool_progress_end (GimpProgress *progress)
       GimpDisplayShell *shell = gimp_display_get_shell (tool->progress_display);
 
       gimp_progress_end (GIMP_PROGRESS (tool->progress));
-      gimp_display_shell_remove_tool_item (shell, tool->progress);
+      gimp_display_shell_remove_unrotated_item (shell, tool->progress);
 
       tool->progress         = NULL;
       tool->progress_display = NULL;

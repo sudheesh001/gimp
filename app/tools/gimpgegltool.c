@@ -110,43 +110,80 @@ gimp_gegl_tool_operation_blacklisted (const gchar *name,
   };
   static const gchar * const name_blacklist[] =
   {
-    "gegl:color", /* pointless */
-    "gegl:color-reduction", /* in gimp */
-    "gegl:color-temperature", /* in gimp */
-    "gegl:color-to-alpha", /* in gimp */
-    "gegl:colorize", /* in gimp */
+    /* these ops are already added to the menus via
+     * filter-actions ordrawable-actions
+     */
+    "gegl:alien-map",
+    "gegl:antialias",
+    "gegl:bump-map",
+    "gegl:c2g",
+    "gegl:cartoon",
+    "gegl:channel-mixer",
+    "gegl:checkerboard",
+    "gegl:color",
+    "gegl:color-reduction",
+    "gegl:color-temperature",
+    "gegl:color-to-alpha",
+    "gegl:cubism",
+    "gegl:deinterlace",
+    "gegl:difference-of-gaussians",
+    "gegl:dot",
+    "gegl:dropshadow",
+    "gegl:edge-laplace",
+    "gegl:edge-sobel",
+    "gegl:emboss",
+    "gegl:exposure",
+    "gegl:fractal-trace",
+    "gegl:gaussian-blur",
+    "gegl:grid",
+    "gegl:invert-linear",
+    "gegl:invert-gamma",
+    "gegl:lens-distortion",
+    "gegl:mono-mixer",
+    "gegl:motion-blur-circular",
+    "gegl:motion-blur-linear",
+    "gegl:motion-blur-zoom",
+    "gegl:noise-cie-lch",
+    "gegl:noise-hsv",
+    "gegl:noise-hurl",
+    "gegl:noise-pick",
+    "gegl:noise-rgb",
+    "gegl:noise-slur",
+    "gegl:noise-spread",
+    "gegl:photocopy",
+    "gegl:pixelize",
+    "gegl:plasma",
+    "gegl:polar-coordinates",
+    "gegl:red-eye-removal",
+    "gegl:ripple",
+    "gegl:shift",
+    "gegl:softglow",
+    "gegl:tile-seamless",
+    "gegl:unsharp-mask",
+    "gegl:value-invert",
+    "gegl:vignette",
+    "gegl:waves",
+    "gegl:whirl-pinch",
+
+    /* these ops are blacklisted for other reasons */
     "gegl:contrast-curve",
-    "gegl:convert-format",
-    "gegl:difference-of-gaussians", /* in gimp */
-    "gegl:display",
-    "gegl:edge-laplace", /* in gimp */
-    "gegl:edge-sobel", /* in gimp */
+    "gegl:convert-format", /* pointless */
+    "gegl:display", /* pointless */
     "gegl:fill-path",
-    "gegl:gaussian-blur", /* in gimp */
-    "gegl:grey", /* in gimp */
-    "gegl:hstack",
-    "gegl:introspect",
-    "gegl:invert", /* in gimp */
-    "gegl:layer",
-    "gegl:lens-correct",
-    "gegl:lens-distortion", /* in gimp */
-    "gegl:opacity", /* pointless */
+    "gegl:grey", /* we use gimp's op */
+    "gegl:hstack", /* pointless */
+    "gegl:introspect", /* pointless */
+    "gegl:layer", /* we use gimp's ops */
+    "gegl:matting-global", /* used in the foreground select tool */
+    "gegl:opacity", /* poinless */
     "gegl:path",
-    "gegl:pixelize", /* in gimp */
-    "gegl:polar-coordinates", /* in gimp */
-    "gegl:posterize", /* in gimp */
-    "gegl:ripple", /* in gimp */
-    "gegl:rotate", /* in gimp */
-    "gegl:scale", /* in gimp */
-    "gegl:sdl-display", /* useless */
-    "gegl:shear", /* in gimp */
-    "gegl:text",
-    "gegl:threshold", /* in gimp */
-    "gegl:transform", /* in gimp */
-    "gegl:translate", /* pointless */
-    "gegl:unsharp-mask", /* in gimp */
-    "gegl:value-invert", /* in gimp */
-    "gegl:vector-stroke"
+    "gegl:posterize", /* we use gimp's op */
+    "gegl:sdl-display", /* pointless */
+    "gegl:seamless-clone", /* used in the seamless clone tool */
+    "gegl:text", /* we use gimp's text rendering */
+    "gegl:threshold", /* we use gimp's op */
+    "gegl:tile", /* pointless */
+    "gegl:vector-stroke",
   };
 
   gchar **categories;
@@ -321,6 +358,13 @@ gimp_gegl_tool_dialog (GimpImageMapTool *image_map_tool)
 
   tool->operation_combo = combo;
 
+  tool->description_label = gtk_label_new ("");
+  gtk_label_set_line_wrap (GTK_LABEL (tool->description_label), TRUE);
+  gtk_misc_set_alignment (GTK_MISC (tool->description_label), 0.0, 0.0);
+  gtk_box_pack_start (GTK_BOX (main_vbox), tool->description_label,
+                      FALSE, FALSE, 0);
+  gtk_box_reorder_child (GTK_BOX (main_vbox), tool->description_label, 1);
+
   /*  The options vbox  */
   o_tool->options_table =
     gtk_label_new (_("Select an operation from the list above"));
@@ -352,6 +396,20 @@ gimp_gegl_tool_operation_changed (GtkWidget    *widget,
 
   if (operation)
     {
+      const gchar *description;
+
+      description = gegl_operation_get_key (operation, "description");
+
+      if (description)
+        {
+          gtk_label_set_text (GTK_LABEL (tool->description_label), description);
+          gtk_widget_show (tool->description_label);
+        }
+      else
+        {
+          gtk_widget_hide (tool->description_label);
+        }
+
       gimp_operation_tool_set_operation (GIMP_OPERATION_TOOL (tool),
                                          operation, NULL);
       g_free (operation);

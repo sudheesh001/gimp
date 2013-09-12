@@ -111,6 +111,7 @@ GimpImage     * gimp_image_new                   (Gimp               *gimp,
                                                   GimpPrecision       precision);
 
 GimpImageBaseType  gimp_image_get_base_type      (const GimpImage    *image);
+GimpComponentType  gimp_image_get_component_type (const GimpImage    *image);
 GimpPrecision      gimp_image_get_precision      (const GimpImage    *image);
 
 const Babl    * gimp_image_get_format            (const GimpImage    *image,
@@ -147,6 +148,7 @@ void            gimp_image_set_filename          (GimpImage          *image,
 gchar         * gimp_image_get_filename          (const GimpImage    *image);
 
 const gchar   * gimp_image_get_display_name      (GimpImage          *image);
+const gchar   * gimp_image_get_display_path      (GimpImage          *image);
 
 void            gimp_image_set_load_proc         (GimpImage          *image,
                                                   GimpPlugInProcedure *proc);
@@ -210,6 +212,7 @@ gboolean        gimp_image_get_component_visible (const GimpImage    *image,
                                                   GimpChannelType     type);
 void            gimp_image_get_visible_array     (const GimpImage    *image,
                                                   gboolean           *components);
+GimpComponentMask gimp_image_get_visible_mask    (const GimpImage    *image);
 
 
 /*  emitting image signals  */

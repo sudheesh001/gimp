@@ -40,6 +40,7 @@ static gchar * sanity_check_freetype          (void);
 static gchar * sanity_check_gdk_pixbuf        (void);
 static gchar * sanity_check_babl              (void);
 static gchar * sanity_check_gegl              (void);
+static gchar * sanity_check_gegl_ops          (void);
 static gchar * sanity_check_filename_encoding (void);
 
 
@@ -73,6 +74,9 @@ sanity_check (void)
 
   if (! abort_message)
     abort_message = sanity_check_gegl ();
+
+  if (! abort_message)
+    abort_message = sanity_check_gegl_ops ();
 
   if (! abort_message)
     abort_message = sanity_check_filename_encoding ();
@@ -130,7 +134,7 @@ static gchar *
 sanity_check_glib (void)
 {
 #define GLIB_REQUIRED_MAJOR 2
-#define GLIB_REQUIRED_MINOR 32
+#define GLIB_REQUIRED_MINOR 36
 #define GLIB_REQUIRED_MICRO 0
 
   const gchar *mismatch = glib_check_version (GLIB_REQUIRED_MAJOR,
@@ -163,7 +167,7 @@ static gchar *
 sanity_check_cairo (void)
 {
 #define CAIRO_REQUIRED_MAJOR 1
-#define CAIRO_REQUIRED_MINOR 10
+#define CAIRO_REQUIRED_MINOR 12
 #define CAIRO_REQUIRED_MICRO 2
 
   if (cairo_version () < CAIRO_VERSION_ENCODE (CAIRO_REQUIRED_MAJOR,
@@ -388,7 +392,7 @@ sanity_check_gegl (void)
   gint gegl_micro_version;
 
 #define GEGL_REQUIRED_MAJOR 0
-#define GEGL_REQUIRED_MINOR 2
+#define GEGL_REQUIRED_MINOR 3
 #define GEGL_REQUIRED_MICRO 0
 
   gegl_get_version (&gegl_major_version,
@@ -414,6 +418,96 @@ sanity_check_gegl (void)
 #undef GEGL_REQUIRED_MAJOR
 #undef GEGL_REQUIRED_MINOR
 #undef GEGL_REQUIRED_MICRO
+
+  return NULL;
+}
+
+static gchar *
+sanity_check_gegl_ops (void)
+{
+  gchar **operations;
+  guint   n_operations;
+  gint i, j;
+
+  static const gchar* required_ops [] = {
+    "gegl:alien-map",
+    "gegl:buffer-sink",
+    "gegl:buffer-source",
+    "gegl:c2g",
+    "gegl:cartoon",
+    "gegl:checkerboard",
+    "gegl:color",
+    "gegl:color-reduction",
+    "gegl:color-temperature",
+    "gegl:color-to-alpha",
+    "gegl:crop",
+    "gegl:cubism",
+    "gegl:deinterlace",
+    "gegl:difference-of-gaussians",
+    "gegl:dot",
+    "gegl:dropshadow",
+    "gegl:edge-laplace",
+    "gegl:edge-sobel",
+    "gegl:emboss",
+    "gegl:exposure",
+    "gegl:fractal-trace",
+    "gegl:gaussian-blur",
+    "gegl:grid",
+    "gegl:introspect",
+    "gegl:invert-gamma",
+    "gegl:invert-linear",
+    "gegl:lens-distortion",
+    "gegl:map-absolute",
+    "gegl:map-relative",
+    "gegl:matting-global",
+/*  "gegl:matting-levin",*/ /* XXX: do we want to require this? */
+    "gegl:mono-mixer",
+    "gegl:motion-blur-circular",
+    "gegl:motion-blur-linear",
+    "gegl:motion-blur-zoom",
+    "gegl:noise-cie-lch",
+    "gegl:noise-hsv",
+    "gegl:noise-hurl",
+    "gegl:noise-pick",
+    "gegl:noise-rgb",
+    "gegl:noise-slur",
+    "gegl:noise-spread",
+    "gegl:opacity",
+    "gegl:over",
+    "gegl:photocopy",
+    "gegl:pixelize",
+    "gegl:polar-coordinates",
+    "gegl:red-eye-removal",
+    "gegl:ripple",
+    "gegl:scale-ratio",
+    "gegl:seamless-clone",
+    "gegl:shift",
+    "gegl:softglow",
+    "gegl:threshold",
+    "gegl:tile",
+    "gegl:tile-seamless",
+    "gegl:transform",
+    "gegl:translate",
+    "gegl:unsharp-mask",
+    "gegl:value-invert",
+    "gegl:vignette",
+    "gegl:warp",
+    "gegl:waves",
+    "gegl:whirl-pinch",
+    "gegl:write-buffer"
+  };
+
+  for (i = 0; i < G_N_ELEMENTS (required_ops); i++)
+    {
+      if (!gegl_has_operation (required_ops[i]))
+        return g_strdup_printf
+          ("GEGL operation missing!\n\n"
+           "GIMP requires the GEGL operation \"%s\". \n"
+           "This operation cannot be found. Check your \n"
+           "GEGL install and ensure it has been compiled \n"
+           "with any dependencies required for GIMP.\n",
+           required_ops [i]);
+    }
 
   return NULL;
 }

@@ -1,15 +1,13 @@
 ## Process this file with automake to produce Makefile.in
 
 AM_CPPFLAGS = \
-	-DG_LOG_DOMAIN=\"Gimp-Tools\"
-
-INCLUDES = \
-	-I$(top_builddir)	\
-	-I$(top_srcdir)		\
-	-I$(top_builddir)/app	\
-	-I$(top_srcdir)/app	\
-	$(GEGL_CFLAGS)		\
-	$(GTK_CFLAGS)		\
+	-DG_LOG_DOMAIN=\"Gimp-Tools\"	\
+	-I$(top_builddir)		\
+	-I$(top_srcdir)			\
+	-I$(top_builddir)/app		\
+	-I$(top_srcdir)/app		\
+	$(GEGL_CFLAGS)			\
+	$(GTK_CFLAGS)			\
 	-I$(includedir)
 
 noinst_LIBRARIES = libapptools.a
@@ -46,6 +44,8 @@ libapptools_a_sources = \
 	gimpcageoptions.h		\
 	gimpcagetool.c			\
 	gimpcagetool.h			\
+	gimpcloneoptions-gui.c		\
+	gimpcloneoptions-gui.h		\
 	gimpclonetool.c			\
 	gimpclonetool.h			\
 	gimpcoloroptions.c		\
@@ -162,6 +162,10 @@ libapptools_a_sources = \
 	gimprotatetool.h		\
 	gimpscaletool.c			\
 	gimpscaletool.h			\
+	gimpseamlesscloneoptions.c	\
+	gimpseamlesscloneoptions.h	\
+	gimpseamlessclonetool.c		\
+	gimpseamlessclonetool.h		\
 	gimpselectionoptions.c		\
 	gimpselectionoptions.h		\
 	gimpselectiontool.c		\
@@ -194,10 +198,16 @@ libapptools_a_sources = \
 	gimptransformtool.h		\
 	gimptransformtoolundo.c		\
 	gimptransformtoolundo.h		\
+	gimpunifiedtransformtool.c	\
+	gimpunifiedtransformtool.h	\
 	gimpvectoroptions.c		\
 	gimpvectoroptions.h		\
 	gimpvectortool.c		\
-	gimpvectortool.h
+	gimpvectortool.h		\
+	gimpwarpoptions.c		\
+	gimpwarpoptions.h		\
+	gimpwarptool.c			\
+	gimpwarptool.h
 
 libapptools_a_built_sources = tools-enums.c
 

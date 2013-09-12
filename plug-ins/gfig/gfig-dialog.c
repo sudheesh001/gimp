@@ -254,8 +254,6 @@ gfig_dialog (void)
       gfig_context->using_new_layer = TRUE;
     }
 
-  gfig_drawable = gimp_drawable_get (gfig_context->drawable_id);
-
   gfig_stock_init ();
 
   path = gimp_gimprc_query ("gfig-path");
@@ -611,7 +609,7 @@ gfig_get_user_writable_dir (void)
       GList *list;
       gchar *dir;
 
-      list = gimp_path_parse (gfig_path, 16, FALSE, NULL);
+      list = gimp_path_parse (gfig_path, 256, FALSE, NULL);
       dir = gimp_path_get_user_writable_dir (list);
       gimp_path_free (list);
 

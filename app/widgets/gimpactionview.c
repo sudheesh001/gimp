@@ -23,6 +23,7 @@
 #include <string.h>
 
 #include <gtk/gtk.h>
+#include <gdk/gdkkeysyms.h>
 
 #include "libgimpbase/gimpbase.h"
 #include "libgimpwidgets/gimpwidgets.h"
@@ -706,7 +707,9 @@ gimp_action_view_conflict_confirm (GimpActionView  *view,
 static const gchar *
 gimp_action_view_get_accel_action (GimpActionView  *view,
                                    const gchar     *path_string,
-                                   GtkAction      **action_return)
+                                   GtkAction      **action_return,
+                                   guint           *action_accel_key,
+                                   GdkModifierType *action_accel_mask)
 {
   GtkTreeModel *model;
   GtkTreePath  *path;
@@ -723,7 +726,9 @@ gimp_action_view_get_accel_action (GimpActionView  *view,
       GtkAction *action;
 
       gtk_tree_model_get (model, &iter,
-                          GIMP_ACTION_VIEW_COLUMN_ACTION, &action,
+                          GIMP_ACTION_VIEW_COLUMN_ACTION,     &action,
+                          GIMP_ACTION_VIEW_COLUMN_ACCEL_KEY,  action_accel_key,
+                          GIMP_ACTION_VIEW_COLUMN_ACCEL_MASK, action_accel_mask,
                           -1);
 
       if (! action)
@@ -751,20 +756,45 @@ gimp_action_view_accel_edited (GtkCellRendererAccel *accel,
                                guint                 hardware_keycode,
                                GimpActionView       *view)
 {
-  GtkAction   *action;
-  const gchar *accel_path;
+  GtkAction       *action;
+  guint            action_accel_key;
+  GdkModifierType  action_accel_mask;
+  const gchar     *accel_path;
 
   accel_path = gimp_action_view_get_accel_action (view, path_string,
-                                                  &action);
+                                                  &action,
+                                                  &action_accel_key,
+                                                  &action_accel_mask);
 
   if (! accel_path)
     return;
 
-  if (! accel_key)
+  if (accel_key  == action_accel_key &&
+      accel_mask == action_accel_mask)
+    return;
+
+  if (! accel_key ||
+
+      /* Don't allow arrow keys, they are all swallowed by the canvas
+       * and cannot be invoked anyway, the same applies to space.
+       */
+      accel_key == GDK_KEY_Left  ||
+      accel_key == GDK_KEY_Right ||
+      accel_key == GDK_KEY_Up    ||
+      accel_key == GDK_KEY_Down  ||
+      accel_key == GDK_KEY_space ||
+      accel_key == GDK_KEY_KP_Space)
     {
       gimp_message_literal (view->manager->gimp,
 			    G_OBJECT (view), GIMP_MESSAGE_ERROR,
 			    _("Invalid shortcut."));
+    }
+  else if (accel_key        == GDK_KEY_F1 ||
+           action_accel_key == GDK_KEY_F1)
+    {
+      gimp_message_literal (view->manager->gimp,
+			    G_OBJECT (view), GIMP_MESSAGE_ERROR,
+			    _("F1 cannot be remapped."));
     }
   else if (! gtk_accel_map_change_entry (accel_path,
                                          accel_key, accel_mask, FALSE))
@@ -840,14 +870,26 @@ gimp_action_view_accel_cleared (GtkCellRendererAccel *accel,
                                 const char           *path_string,
                                 GimpActionView       *view)
 {
-  GtkAction   *action;
-  const gchar *accel_path;
+  GtkAction       *action;
+  guint            action_accel_key;
+  GdkModifierType  action_accel_mask;
+  const gchar     *accel_path;
 
   accel_path = gimp_action_view_get_accel_action (view, path_string,
-                                                  &action);
+                                                  &action,
+                                                  &action_accel_key,
+                                                  &action_accel_mask);
 
   if (! accel_path)
     return;
+
+  if (action_accel_key == GDK_KEY_F1)
+    {
+      gimp_message_literal (view->manager->gimp,
+			    G_OBJECT (view), GIMP_MESSAGE_ERROR,
+			    _("F1 cannot be remapped."));
+      return;
+    }
 
   if (! gtk_accel_map_change_entry (accel_path, 0, 0, FALSE))
     {

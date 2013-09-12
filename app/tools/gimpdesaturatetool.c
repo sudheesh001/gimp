@@ -20,8 +20,6 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
-#include "libgimpmath/gimpmath.h"
-#include "libgimpconfig/gimpconfig.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
 #include "tools-types.h"
@@ -47,14 +45,9 @@ static gboolean   gimp_desaturate_tool_initialize    (GimpTool           *tool,
                                                       GError            **error);
 
 static GeglNode * gimp_desaturate_tool_get_operation (GimpImageMapTool   *im_tool,
-                                                      GObject           **config);
+                                                      GObject           **config,
+                                                      gchar             **undo_desc);
 static void       gimp_desaturate_tool_dialog        (GimpImageMapTool   *im_tool);
-
-static void       gimp_desaturate_tool_config_notify (GObject            *object,
-                                                      GParamSpec         *pspec,
-                                                      GimpDesaturateTool *desaturate_tool);
-static void       gimp_desaturate_tool_mode_changed  (GtkWidget          *button,
-                                                      GimpDesaturateTool *desaturate_tool);
 
 
 G_DEFINE_TYPE (GimpDesaturateTool, gimp_desaturate_tool,
@@ -103,9 +96,8 @@ gimp_desaturate_tool_initialize (GimpTool     *tool,
                                 GimpDisplay  *display,
                                 GError      **error)
 {
-  GimpDesaturateTool *desaturate_tool = GIMP_DESATURATE_TOOL (tool);
-  GimpImage          *image           = gimp_display_get_image (display);
-  GimpDrawable       *drawable        = gimp_image_get_active_drawable (image);
+  GimpImage    *image    = gimp_display_get_image (display);
+  GimpDrawable *drawable = gimp_image_get_active_drawable (image);
 
   if (! drawable)
     return FALSE;
@@ -117,45 +109,20 @@ gimp_desaturate_tool_initialize (GimpTool     *tool,
       return FALSE;
     }
 
-  gimp_config_reset (GIMP_CONFIG (desaturate_tool->config));
-
-  if (! GIMP_TOOL_CLASS (parent_class)->initialize (tool, display, error))
-    {
-      return FALSE;
-    }
-
-  gimp_int_radio_group_set_active (GTK_RADIO_BUTTON (desaturate_tool->button),
-                                   desaturate_tool->config->mode);
-
-  gimp_image_map_tool_preview (GIMP_IMAGE_MAP_TOOL (desaturate_tool));
-
-  return TRUE;
+  return GIMP_TOOL_CLASS (parent_class)->initialize (tool, display, error);
 }
 
 static GeglNode *
 gimp_desaturate_tool_get_operation (GimpImageMapTool  *image_map_tool,
-                                    GObject          **config)
+                                    GObject          **config,
+                                    gchar            **undo_desc)
 {
-  GimpDesaturateTool *desaturate_tool = GIMP_DESATURATE_TOOL (image_map_tool);
-  GeglNode           *node;
+  *config = g_object_new (GIMP_TYPE_DESATURATE_CONFIG, NULL);
 
-  node = g_object_new (GEGL_TYPE_NODE,
-                       "operation", "gimp:desaturate",
-                       NULL);
-
-  desaturate_tool->config = g_object_new (GIMP_TYPE_DESATURATE_CONFIG, NULL);
-
-  *config = G_OBJECT (desaturate_tool->config);
-
-  g_signal_connect_object (desaturate_tool->config, "notify",
-                           G_CALLBACK (gimp_desaturate_tool_config_notify),
-                           G_OBJECT (desaturate_tool), 0);
-
-  gegl_node_set (node,
-                 "config", desaturate_tool->config,
-                 NULL);
-
-  return node;
+  return gegl_node_new_child (NULL,
+                              "operation", "gimp:desaturate",
+                              "config",    *config,
+                              NULL);
 }
 
 
@@ -166,53 +133,14 @@ gimp_desaturate_tool_get_operation (GimpImageMapTool  *image_map_tool,
 static void
 gimp_desaturate_tool_dialog (GimpImageMapTool *image_map_tool)
 {
-  GimpDesaturateTool *desaturate_tool = GIMP_DESATURATE_TOOL (image_map_tool);
-  GtkWidget          *main_vbox;
-  GtkWidget          *frame;
+  GtkWidget *main_vbox;
+  GtkWidget *frame;
 
   main_vbox = gimp_image_map_tool_dialog_get_vbox (image_map_tool);
 
-  /*  The table containing sliders  */
-  frame = gimp_enum_radio_frame_new (GIMP_TYPE_DESATURATE_MODE,
-                                     gtk_label_new (_("Choose shade of gray based on:")),
-                                     G_CALLBACK (gimp_desaturate_tool_mode_changed),
-                                     desaturate_tool,
-                                     &desaturate_tool->button);
-
+  frame = gimp_prop_enum_radio_frame_new (image_map_tool->config, "mode",
+                                          _("Choose shade of gray based on:"),
+                                          0, 0);
   gtk_box_pack_start (GTK_BOX (main_vbox), frame, FALSE, FALSE, 0);
   gtk_widget_show (frame);
-}
-
-static void
-gimp_desaturate_tool_config_notify (GObject            *object,
-                                    GParamSpec         *pspec,
-                                    GimpDesaturateTool *desaturate_tool)
-{
-  GimpDesaturateConfig *config = GIMP_DESATURATE_CONFIG (object);
-
-  if (! desaturate_tool->button)
-    return;
-
-  gimp_int_radio_group_set_active (GTK_RADIO_BUTTON (desaturate_tool->button),
-                                   config->mode);
-
-  gimp_image_map_tool_preview (GIMP_IMAGE_MAP_TOOL (desaturate_tool));
-}
-
-static void
-gimp_desaturate_tool_mode_changed (GtkWidget          *button,
-                                   GimpDesaturateTool *desaturate_tool)
-{
-  GimpDesaturateConfig *config = desaturate_tool->config;
-  GimpDesaturateMode    mode;
-
-  mode = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (button),
-                                             "gimp-item-data"));
-
-  if (config->mode != mode)
-    {
-      g_object_set (config,
-                    "mode", mode,
-                    NULL);
-    }
 }

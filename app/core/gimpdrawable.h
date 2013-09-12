@@ -62,8 +62,11 @@ struct _GimpDrawableClass
   GimpComponentMask (* get_active_mask)   (const GimpDrawable   *drawable);
   void          (* convert_type)          (GimpDrawable         *drawable,
                                            GimpImage            *dest_image,
+                                           const Babl           *new_format,
                                            GimpImageBaseType     new_base_type,
                                            GimpPrecision         new_precision,
+                                           gint                  layer_dither_type,
+                                           gint                  mask_dither_type,
                                            gboolean              push_undo);
   void          (* apply_buffer)          (GimpDrawable         *drawable,
                                            GeglBuffer           *buffer,
@@ -137,6 +140,8 @@ void            gimp_drawable_convert_type       (GimpDrawable       *drawable,
                                                   GimpImage          *dest_image,
                                                   GimpImageBaseType   new_base_type,
                                                   GimpPrecision       new_precision,
+                                                  gint                layer_dither_type,
+                                                  gint                mask_dither_type,
                                                   gboolean            push_undo);
 
 void            gimp_drawable_apply_buffer       (GimpDrawable        *drawable,
@@ -200,8 +205,10 @@ const Babl    * gimp_drawable_get_format_with_alpha
                                                  (const GimpDrawable *drawable);
 const Babl    * gimp_drawable_get_format_without_alpha
                                                  (const GimpDrawable *drawable);
+gboolean        gimp_drawable_get_linear         (const GimpDrawable *drawable);
 gboolean        gimp_drawable_has_alpha          (const GimpDrawable *drawable);
 GimpImageBaseType gimp_drawable_get_base_type    (const GimpDrawable *drawable);
+GimpComponentType gimp_drawable_get_component_type(const GimpDrawable *drawable);
 GimpPrecision   gimp_drawable_get_precision      (const GimpDrawable *drawable);
 gboolean        gimp_drawable_is_rgb             (const GimpDrawable *drawable);
 gboolean        gimp_drawable_is_gray            (const GimpDrawable *drawable);
@@ -213,6 +220,8 @@ GimpLayer    * gimp_drawable_get_floating_sel    (const GimpDrawable *drawable);
 void           gimp_drawable_attach_floating_sel (GimpDrawable       *drawable,
                                                   GimpLayer          *floating_sel);
 void           gimp_drawable_detach_floating_sel (GimpDrawable       *drawable);
+GimpFilter *
+           gimp_drawable_get_floating_sel_filter (GimpDrawable       *drawable);
 
 
 #endif /* __GIMP_DRAWABLE_H__ */

@@ -29,7 +29,6 @@
 #include "gimpoperationgrainmergemode.h"
 
 
-static void     gimp_operation_grain_merge_mode_prepare (GeglOperation       *operation);
 static gboolean gimp_operation_grain_merge_mode_process (GeglOperation       *operation,
                                                          void                *in_buf,
                                                          void                *aux_buf,
@@ -58,26 +57,13 @@ gimp_operation_grain_merge_mode_class_init (GimpOperationGrainMergeModeClass *kl
                                  "description", "GIMP grain merge mode operation",
                                  NULL);
 
-  operation_class->prepare = gimp_operation_grain_merge_mode_prepare;
-  point_class->process     = gimp_operation_grain_merge_mode_process;
+  point_class->process = gimp_operation_grain_merge_mode_process;
 }
 
 static void
 gimp_operation_grain_merge_mode_init (GimpOperationGrainMergeMode *self)
 {
 }
-
-static void
-gimp_operation_grain_merge_mode_prepare (GeglOperation *operation)
-{
-  const Babl *format = babl_format ("R'G'B'A float");
-
-  gegl_operation_set_format (operation, "input",  format);
-  gegl_operation_set_format (operation, "aux",    format);
-  gegl_operation_set_format (operation, "aux2",   babl_format ("Y float"));
-  gegl_operation_set_format (operation, "output", format);
-}
-
 
 static gboolean
 gimp_operation_grain_merge_mode_process (GeglOperation       *operation,
@@ -89,12 +75,22 @@ gimp_operation_grain_merge_mode_process (GeglOperation       *operation,
                                          const GeglRectangle *roi,
                                          gint                 level)
 {
-  gdouble         opacity  = GIMP_OPERATION_POINT_LAYER_MODE (operation)->opacity;
-  gfloat         *in       = in_buf;
-  gfloat         *layer    = aux_buf;
-  gfloat         *mask     = aux2_buf;
-  gfloat         *out      = out_buf;
-  const gboolean  has_mask = mask != NULL;
+  gfloat opacity = GIMP_OPERATION_POINT_LAYER_MODE (operation)->opacity;
+
+  return gimp_operation_grain_merge_mode_process_pixels (in_buf, aux_buf, aux2_buf, out_buf, opacity, samples, roi, level);
+}
+
+gboolean
+gimp_operation_grain_merge_mode_process_pixels (gfloat              *in,
+                                                gfloat              *layer,
+                                                gfloat              *mask,
+                                                gfloat              *out,
+                                                gfloat               opacity,
+                                                glong                samples,
+                                                const GeglRectangle *roi,
+                                                gint                 level)
+{
+  const gboolean has_mask = mask != NULL;
 
   while (samples--)
     {

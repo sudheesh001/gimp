@@ -1467,7 +1467,7 @@ gflare_save (GFlare *gflare)
           return;
         }
 
-      list = gimp_path_parse (gflare_path, 16, FALSE, NULL);
+      list = gimp_path_parse (gflare_path, 256, FALSE, NULL);
       path = gimp_path_get_user_writable_dir (list);
       gimp_path_free (list);
 
@@ -4726,6 +4726,8 @@ gradient_get_list (gint *num_gradients)
       gradients[n++] = g_strdup (external_gradients[i]);
     }
 
+  g_strfreev (external_gradients);
+
   return gradients;
 }
 
@@ -4862,7 +4864,7 @@ gradient_get_default (const gchar *name,
   currently 6 gradient menus.)
 
   However, this caching routine is not too good. It picks up just
-  GRADIENT_RESOLUTION samples everytime, and rescales it later.  And
+  GRADIENT_RESOLUTION samples every time, and rescales it later.  And
   cached values are stored in guchar array. No accuracy.
  */
 static void

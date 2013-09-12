@@ -117,8 +117,10 @@ gimp_drawable_tree_view_class_init (GimpDrawableTreeViewClass *klass)
 
   item_view_class->set_image     = gimp_drawable_tree_view_set_image;
 
-  item_view_class->lock_content_stock_id = GIMP_STOCK_TOOL_PAINTBRUSH;
-  item_view_class->lock_content_tooltip  = _("Lock pixels");
+  item_view_class->lock_content_stock_id  = GIMP_STOCK_TOOL_PAINTBRUSH;
+  item_view_class->lock_content_tooltip   = _("Lock pixels");
+  item_view_class->lock_position_stock_id = GIMP_STOCK_TOOL_MOVE;
+  item_view_class->lock_position_tooltip  = _("Lock position and size");
 }
 
 static void
@@ -140,8 +142,7 @@ gimp_drawable_tree_view_constructed (GObject *object)
   GimpContainerTreeView *tree_view = GIMP_CONTAINER_TREE_VIEW (object);
   GimpItemTreeView      *item_view = GIMP_ITEM_TREE_VIEW (object);
 
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   gimp_dnd_viewable_dest_add (gimp_item_tree_view_get_new_button (item_view),
                               GIMP_TYPE_PATTERN,

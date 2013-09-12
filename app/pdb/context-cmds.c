@@ -438,27 +438,28 @@ context_get_brush_size_invoker (GimpProcedure         *procedure,
                                 GError               **error)
 {
   gboolean success = TRUE;
-  gdouble size;
+  GimpValueArray *return_vals;
+  gdouble size = 0.0;
 
-  size = g_value_get_double (gimp_value_array_index (args, 0));
+  /* all options should have the same value, so pick a random one */
+  GimpPaintOptions *options =
+    gimp_pdb_context_get_paint_options (GIMP_PDB_CONTEXT (context),
+                                        "gimp-paintbrush");
+
+  if (options)
+    g_object_get (options,
+                  "brush-size", &size,
+                   NULL);
+  else
+    success = FALSE;
+
+  return_vals = gimp_procedure_get_return_values (procedure, success,
+                                                  error ? *error : NULL);
 
   if (success)
-    {
-      /* all options should have the same value, so pick a random one */
-      GimpPaintOptions *options =
-        gimp_pdb_context_get_paint_options (GIMP_PDB_CONTEXT (context),
-                                            "gimp-paintbrush");
+    g_value_set_double (gimp_value_array_index (return_vals, 1), size);
 
-      if (options)
-        g_object_get (options,
-                      "brush-size", &size,
-                       NULL);
-      else
-        success = FALSE;
-    }
-
-  return gimp_procedure_get_return_values (procedure, success,
-                                           error ? *error : NULL);
+  return return_vals;
 }
 
 static GimpValueArray *
@@ -538,27 +539,28 @@ context_get_brush_aspect_ratio_invoker (GimpProcedure         *procedure,
                                         GError               **error)
 {
   gboolean success = TRUE;
-  gdouble aspect;
+  GimpValueArray *return_vals;
+  gdouble aspect = 0.0;
 
-  aspect = g_value_get_double (gimp_value_array_index (args, 0));
+  /* all options should have the same value, so pick a random one */
+  GimpPaintOptions *options =
+    gimp_pdb_context_get_paint_options (GIMP_PDB_CONTEXT (context),
+                                        "gimp-paintbrush");
+
+  if (options)
+    g_object_get (options,
+                  "brush-aspect-ratio", &aspect,
+                  NULL);
+  else
+    success = FALSE;
+
+  return_vals = gimp_procedure_get_return_values (procedure, success,
+                                                  error ? *error : NULL);
 
   if (success)
-    {
-      /* all options should have the same value, so pick a random one */
-      GimpPaintOptions *options =
-        gimp_pdb_context_get_paint_options (GIMP_PDB_CONTEXT (context),
-                                            "gimp-paintbrush");
+    g_value_set_double (gimp_value_array_index (return_vals, 1), aspect);
 
-      if (options)
-        g_object_get (options,
-                      "brush-aspect-ratio", &aspect,
-                      NULL);
-      else
-        success = FALSE;
-    }
-
-  return gimp_procedure_get_return_values (procedure, success,
-                                           error ? *error : NULL);
+  return return_vals;
 }
 
 static GimpValueArray *
@@ -602,27 +604,28 @@ context_get_brush_angle_invoker (GimpProcedure         *procedure,
                                  GError               **error)
 {
   gboolean success = TRUE;
-  gdouble angle;
+  GimpValueArray *return_vals;
+  gdouble angle = 0.0;
 
-  angle = g_value_get_double (gimp_value_array_index (args, 0));
+  /* all options should have the same value, so pick a random one */
+  GimpPaintOptions *options =
+    gimp_pdb_context_get_paint_options (GIMP_PDB_CONTEXT (context),
+                                        "gimp-paintbrush");
+
+  if (options)
+    g_object_get (options,
+                  "brush-angle", &angle,
+                  NULL);
+  else
+    success = FALSE;
+
+  return_vals = gimp_procedure_get_return_values (procedure, success,
+                                                  error ? *error : NULL);
 
   if (success)
-    {
-      /* all options should have the same value, so pick a random one */
-      GimpPaintOptions *options =
-        gimp_pdb_context_get_paint_options (GIMP_PDB_CONTEXT (context),
-                                            "gimp-paintbrush");
+    g_value_set_double (gimp_value_array_index (return_vals, 1), angle);
 
-      if (options)
-        g_object_get (options,
-                      "brush-angle", &angle,
-                      NULL);
-      else
-        success = FALSE;
-    }
-
-  return gimp_procedure_get_return_values (procedure, success,
-                                           error ? *error : NULL);
+  return return_vals;
 }
 
 static GimpValueArray *
@@ -1449,9 +1452,7 @@ context_get_transform_recursion_invoker (GimpProcedure         *procedure,
   GimpValueArray *return_vals;
   gint32 transform_recursion = 0;
 
-  g_object_get (context,
-                "transform-recursion", &transform_recursion,
-                NULL);
+  transform_recursion = 3;
 
   return_vals = gimp_procedure_get_return_values (procedure, TRUE, NULL);
   g_value_set_int (gimp_value_array_index (return_vals, 1), transform_recursion);
@@ -1468,17 +1469,9 @@ context_set_transform_recursion_invoker (GimpProcedure         *procedure,
                                          GError               **error)
 {
   gboolean success = TRUE;
-  gint32 transform_recursion;
-
-  transform_recursion = g_value_get_int (gimp_value_array_index (args, 0));
-
   if (success)
     {
-      g_object_set (context,
-                    "transform-recursion", transform_recursion,
-                    NULL);
     }
-
   return gimp_procedure_get_return_values (procedure, success,
                                            error ? *error : NULL);
 }
@@ -2408,12 +2401,12 @@ register_context_procs (GimpPDB *pdb)
                                      "Ed Swartz",
                                      "2012",
                                      NULL);
-  gimp_procedure_add_argument (procedure,
-                               g_param_spec_double ("size",
-                                                    "size",
-                                                    "brush size in pixels",
-                                                    0, G_MAXDOUBLE, 0,
-                                                    GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   g_param_spec_double ("size",
+                                                        "size",
+                                                        "brush size in pixels",
+                                                        0, G_MAXDOUBLE, 0,
+                                                        GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
@@ -2471,12 +2464,12 @@ register_context_procs (GimpPDB *pdb)
                                      "Ed Swartz",
                                      "2012",
                                      NULL);
-  gimp_procedure_add_argument (procedure,
-                               g_param_spec_double ("aspect",
-                                                    "aspect",
-                                                    "aspect ratio",
-                                                    -20, 20, -20,
-                                                    GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   g_param_spec_double ("aspect",
+                                                        "aspect",
+                                                        "aspect ratio",
+                                                        -20, 20, -20,
+                                                        GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
@@ -2517,12 +2510,12 @@ register_context_procs (GimpPDB *pdb)
                                      "Ed Swartz",
                                      "2012",
                                      NULL);
-  gimp_procedure_add_argument (procedure,
-                               g_param_spec_double ("angle",
-                                                    "angle",
-                                                    "angle in degrees",
-                                                    -180, 180, -180,
-                                                    GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   g_param_spec_double ("angle",
+                                                        "angle",
+                                                        "angle in degrees",
+                                                        -180, 180, -180,
+                                                        GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
@@ -3323,16 +3316,16 @@ register_context_procs (GimpPDB *pdb)
                                "gimp-context-get-transform-recursion");
   gimp_procedure_set_static_strings (procedure,
                                      "gimp-context-get-transform-recursion",
-                                     "Get the transform supersampling recursion.",
-                                     "This procedure returns the transform supersampling recursion level.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2010",
-                                     NULL);
+                                     "Deprecated: There is no replacement for this procedure.",
+                                     "Deprecated: There is no replacement for this procedure.",
+                                     "",
+                                     "",
+                                     "",
+                                     "NONE");
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_int32 ("transform-recursion",
                                                           "transform recursion",
-                                                          "The transform recursion level",
+                                                          "This returns always 3 and is meaningless",
                                                           1, G_MAXINT32, 1,
                                                           GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
@@ -3346,16 +3339,16 @@ register_context_procs (GimpPDB *pdb)
                                "gimp-context-set-transform-recursion");
   gimp_procedure_set_static_strings (procedure,
                                      "gimp-context-set-transform-recursion",
-                                     "Set the transform supersampling recursion.",
-                                     "This procedure modifies the transform supersampling recursion level setting. Whether or not a transformation does supersampling is determined by the interplolation type. The recursion level defaults to 3, which is a nice default value. This setting affects affects the following procedures: 'gimp-item-transform-flip', 'gimp-item-transform-perspective', 'gimp-item-transform-rotate', 'gimp-item-transform-scale', 'gimp-item-transform-shear', 'gimp-item-transform-2d', 'gimp-item-transform-matrix'.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2010",
-                                     NULL);
+                                     "Deprecated: There is no replacement for this procedure.",
+                                     "Deprecated: There is no replacement for this procedure.",
+                                     "",
+                                     "",
+                                     "",
+                                     "NONE");
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_int32 ("transform-recursion",
                                                       "transform recursion",
-                                                      "The transform recursion level",
+                                                      "This parameter is ignored",
                                                       1, G_MAXINT32, 1,
                                                       GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);

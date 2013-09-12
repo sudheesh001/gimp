@@ -57,17 +57,17 @@ enum
 };
 
 
-static void      gimp_text_style_editor_constructed       (GObject               *object);
-static void      gimp_text_style_editor_dispose           (GObject               *object);
-static void      gimp_text_style_editor_finalize          (GObject               *object);
-static void      gimp_text_style_editor_set_property      (GObject               *object,
-                                                           guint                  property_id,
-                                                           const GValue          *value,
-                                                           GParamSpec            *pspec);
-static void      gimp_text_style_editor_get_property      (GObject               *object,
-                                                           guint                  property_id,
-                                                           GValue                *value,
-                                                           GParamSpec            *pspec);
+static void      gimp_text_style_editor_constructed       (GObject             *object);
+static void      gimp_text_style_editor_dispose           (GObject             *object);
+static void      gimp_text_style_editor_finalize          (GObject             *object);
+static void      gimp_text_style_editor_set_property      (GObject             *object,
+                                                           guint                property_id,
+                                                           const GValue        *value,
+                                                           GParamSpec          *pspec);
+static void      gimp_text_style_editor_get_property      (GObject             *object,
+                                                           guint                property_id,
+                                                           GValue              *value,
+                                                           GParamSpec          *pspec);
 
 static GtkWidget * gimp_text_style_editor_create_toggle   (GimpTextStyleEditor *editor,
                                                            GtkTextTag          *tag,
@@ -297,8 +297,7 @@ gimp_text_style_editor_constructed (GObject *object)
 {
   GimpTextStyleEditor *editor = GIMP_TEXT_STYLE_EDITOR (object);
 
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   g_assert (GIMP_IS_GIMP (editor->gimp));
   g_assert (GIMP_IS_FONT_LIST (editor->fonts));
@@ -365,6 +364,8 @@ gimp_text_style_editor_constructed (GObject *object)
                          G_CALLBACK (gimp_text_style_editor_update),
                          editor, 0,
                          G_CONNECT_AFTER | G_CONNECT_SWAPPED);
+
+  gimp_text_style_editor_update (editor);
 }
 
 static void
@@ -559,6 +560,66 @@ gimp_text_style_editor_list_tags (GimpTextStyleEditor  *editor,
         }
     }
 
+  {
+    GList   *list;
+    gdouble  pixels;
+
+    for (list = editor->buffer->size_tags; list; list = g_list_next (list))
+      *remove_tags = g_list_prepend (*remove_tags, list->data);
+
+    pixels = gimp_size_entry_get_refval (GIMP_SIZE_ENTRY (editor->size_entry), 0);
+
+    if (pixels != 0.0)
+      {
+        GtkTextTag *tag;
+        gdouble     points;
+
+        points = gimp_units_to_points (pixels,
+                                       GIMP_UNIT_PIXEL,
+                                       editor->resolution_y);
+        tag = gimp_text_buffer_get_size_tag (editor->buffer,
+                                             PANGO_SCALE * points);
+        tags = g_list_prepend (tags, tag);
+      }
+  }
+
+  {
+    GList       *list;
+    const gchar *font_name;
+
+    for (list = editor->buffer->font_tags; list; list = g_list_next (list))
+      *remove_tags = g_list_prepend (*remove_tags, list->data);
+
+    font_name = gimp_context_get_font_name (editor->context);
+
+    if (font_name)
+      {
+        GtkTextTag  *tag;
+
+        tag = gimp_text_buffer_get_font_tag (editor->buffer, font_name);
+        tags = g_list_prepend (tags, tag);
+      }
+  }
+
+  {
+    GList   *list;
+    GimpRGB  color;
+
+    for (list = editor->buffer->color_tags; list; list = g_list_next (list))
+      *remove_tags = g_list_prepend (*remove_tags, list->data);
+
+    gimp_color_button_get_color (GIMP_COLOR_BUTTON (editor->color_button),
+                                 &color);
+
+    if (TRUE) /* FIXME should have "inconsistent" state as for font and size */
+      {
+        GtkTextTag *tag;
+
+        tag = gimp_text_buffer_get_color_tag (editor->buffer, &color);
+        tags = g_list_prepend (tags, tag);
+      }
+  }
+
   *remove_tags = g_list_reverse (*remove_tags);
 
   return g_list_reverse (tags);
@@ -623,15 +684,21 @@ gimp_text_style_editor_font_changed (GimpContext         *context,
                                      GimpTextStyleEditor *editor)
 {
   GtkTextBuffer *buffer = GTK_TEXT_BUFFER (editor->buffer);
-  GtkTextIter    start, end;
+  GList         *insert_tags;
+  GList         *remove_tags;
 
-  if (! gtk_text_buffer_get_selection_bounds (buffer, &start, &end))
+  if (gtk_text_buffer_get_has_selection (buffer))
     {
-      return;
+      GtkTextIter start, end;
+
+      gtk_text_buffer_get_selection_bounds (buffer, &start, &end);
+
+      gimp_text_buffer_set_font (editor->buffer, &start, &end,
+                                 gimp_context_get_font_name (context));
     }
 
-  gimp_text_buffer_set_font (editor->buffer, &start, &end,
-                             gimp_context_get_font_name (context));
+  insert_tags = gimp_text_style_editor_list_tags (editor, &remove_tags);
+  gimp_text_buffer_set_insert_tags (editor->buffer, insert_tags, remove_tags);
 }
 
 static void
@@ -675,16 +742,22 @@ gimp_text_style_editor_color_changed (GimpColorButton     *button,
                                       GimpTextStyleEditor *editor)
 {
   GtkTextBuffer *buffer = GTK_TEXT_BUFFER (editor->buffer);
-  GtkTextIter    start, end;
-  GimpRGB        color;
+  GList         *insert_tags;
+  GList         *remove_tags;
 
-  if (! gtk_text_buffer_get_selection_bounds (buffer, &start, &end))
+  if (gtk_text_buffer_get_has_selection (buffer))
     {
-      return;
+      GtkTextIter start, end;
+      GimpRGB     color;
+
+      gtk_text_buffer_get_selection_bounds (buffer, &start, &end);
+
+      gimp_color_button_get_color (button, &color);
+      gimp_text_buffer_set_color (editor->buffer, &start, &end, &color);
     }
 
-  gimp_color_button_get_color (button, &color);
-  gimp_text_buffer_set_color (editor->buffer, &start, &end, &color);
+  insert_tags = gimp_text_style_editor_list_tags (editor, &remove_tags);
+  gimp_text_buffer_set_insert_tags (editor->buffer, insert_tags, remove_tags);
 }
 
 static void
@@ -704,6 +777,8 @@ gimp_text_style_editor_set_color (GimpTextStyleEditor *editor,
 
   gimp_color_button_set_color (GIMP_COLOR_BUTTON (editor->color_button),
                                &color);
+
+  /* FIXME should have "inconsistent" state as for font and size */
 
   g_signal_handlers_unblock_by_func (editor->color_button,
                                      gimp_text_style_editor_color_changed,
@@ -779,20 +854,26 @@ gimp_text_style_editor_size_changed (GimpSizeEntry       *entry,
                                      GimpTextStyleEditor *editor)
 {
   GtkTextBuffer *buffer = GTK_TEXT_BUFFER (editor->buffer);
-  GtkTextIter    start, end;
-  gdouble        points;
+  GList         *insert_tags;
+  GList         *remove_tags;
 
-  if (! gtk_text_buffer_get_selection_bounds (buffer, &start, &end))
+  if (gtk_text_buffer_get_has_selection (buffer))
     {
-      return;
+      GtkTextIter start, end;
+      gdouble     points;
+
+      gtk_text_buffer_get_selection_bounds (buffer, &start, &end);
+
+      points = gimp_units_to_points (gimp_size_entry_get_refval (entry, 0),
+                                     GIMP_UNIT_PIXEL,
+                                     editor->resolution_y);
+
+      gimp_text_buffer_set_size (editor->buffer, &start, &end,
+                                 PANGO_SCALE * points);
     }
 
-  points = gimp_units_to_points (gimp_size_entry_get_refval (entry, 0),
-                                 GIMP_UNIT_PIXEL,
-                                 editor->resolution_y);
-
-  gimp_text_buffer_set_size (editor->buffer, &start, &end,
-                             PANGO_SCALE * points);
+  insert_tags = gimp_text_style_editor_list_tags (editor, &remove_tags);
+  gimp_text_buffer_set_insert_tags (editor->buffer, insert_tags, remove_tags);
 }
 
 static void
@@ -1214,6 +1295,24 @@ gimp_text_style_editor_update_idle (GimpTextStyleEditor *editor)
       g_slist_free (tags);
       g_slist_free (tags_on);
       g_slist_free (tags_off);
+    }
+
+  if (editor->context->font_name &&
+      g_strcmp0 (editor->context->font_name,
+                 gimp_object_get_name (gimp_context_get_font (editor->context))))
+    {
+      /* A font is set, but is unavailable; change the help text. */
+      gchar *help_text;
+
+      help_text = g_strdup_printf (_("Font \"%s\" unavailable on this system"),
+                                   editor->context->font_name);
+      gimp_help_set_help_data (editor->font_entry, help_text, NULL);
+      g_free (help_text);
+    }
+  else
+    {
+      gimp_help_set_help_data (editor->font_entry,
+                               _("Change font of selected text"), NULL);
     }
 
   return FALSE;

@@ -35,25 +35,32 @@
 enum
 {
   PROP_0,
-  PROP_PREMULTIPLIED,
+  PROP_LINEAR,
   PROP_OPACITY
 };
 
 
-static void     gimp_operation_point_layer_mode_set_property (GObject       *object,
-                                                              guint          property_id,
-                                                              const GValue  *value,
-                                                              GParamSpec    *pspec);
-static void     gimp_operation_point_layer_mode_get_property (GObject       *object,
-                                                              guint          property_id,
-                                                              GValue        *value,
-                                                              GParamSpec    *pspec);
+static void     gimp_operation_point_layer_mode_set_property (GObject              *object,
+                                                              guint                 property_id,
+                                                              const GValue         *value,
+                                                              GParamSpec           *pspec);
+static void     gimp_operation_point_layer_mode_get_property (GObject              *object,
+                                                              guint                 property_id,
+                                                              GValue               *value,
+                                                              GParamSpec           *pspec);
 
-static void     gimp_operation_point_layer_mode_prepare      (GeglOperation *operation);
+static void     gimp_operation_point_layer_mode_prepare      (GeglOperation        *operation);
+static gboolean gimp_operation_point_layer_mode_process      (GeglOperation        *operation,
+                                                              GeglOperationContext *context,
+                                                              const gchar          *output_prop,
+                                                              const GeglRectangle  *result,
+                                                              gint                  level);
 
 
 G_DEFINE_TYPE (GimpOperationPointLayerMode, gimp_operation_point_layer_mode,
                GEGL_TYPE_OPERATION_POINT_COMPOSER3)
+
+#define parent_class gimp_operation_point_layer_mode_parent_class
 
 
 static void
@@ -66,15 +73,10 @@ gimp_operation_point_layer_mode_class_init (GimpOperationPointLayerModeClass *kl
   object_class->get_property = gimp_operation_point_layer_mode_get_property;
 
   operation_class->prepare   = gimp_operation_point_layer_mode_prepare;
+  operation_class->process   = gimp_operation_point_layer_mode_process;
 
-  gegl_operation_class_set_keys (operation_class,
-                                 "name",        "gimp:point-layer-mode",
-                                 "description", "GIMP point layer mode operation",
-                                 "categories",  "compositors",
-                                 NULL);
-
-  g_object_class_install_property (object_class, PROP_PREMULTIPLIED,
-                                   g_param_spec_boolean ("premultiplied",
+  g_object_class_install_property (object_class, PROP_LINEAR,
+                                   g_param_spec_boolean ("linear",
                                                          NULL, NULL,
                                                          FALSE,
                                                          GIMP_PARAM_READWRITE |
@@ -103,8 +105,8 @@ gimp_operation_point_layer_mode_set_property (GObject      *object,
 
   switch (property_id)
     {
-    case PROP_PREMULTIPLIED:
-      self->premultiplied = g_value_get_boolean (value);
+    case PROP_LINEAR:
+      self->linear = g_value_get_boolean (value);
       break;
 
     case PROP_OPACITY:
@@ -127,8 +129,8 @@ gimp_operation_point_layer_mode_get_property (GObject    *object,
 
   switch (property_id)
     {
-    case PROP_PREMULTIPLIED:
-      g_value_set_boolean (value, self->premultiplied);
+    case PROP_LINEAR:
+      g_value_set_boolean (value, self->linear);
       break;
 
     case PROP_OPACITY:
@@ -147,8 +149,8 @@ gimp_operation_point_layer_mode_prepare (GeglOperation *operation)
   GimpOperationPointLayerMode *self = GIMP_OPERATION_POINT_LAYER_MODE (operation);
   const Babl                  *format;
 
-  if (self->premultiplied)
-    format = babl_format ("R'aG'aB'aA float");
+  if (self->linear)
+    format = babl_format ("RGBA float");
   else
     format = babl_format ("R'G'B'A float");
 
@@ -156,4 +158,38 @@ gimp_operation_point_layer_mode_prepare (GeglOperation *operation)
   gegl_operation_set_format (operation, "output", format);
   gegl_operation_set_format (operation, "aux",    format);
   gegl_operation_set_format (operation, "aux2",   babl_format ("Y float"));
+}
+
+static gboolean
+gimp_operation_point_layer_mode_process (GeglOperation        *operation,
+                                         GeglOperationContext *context,
+                                         const gchar          *output_prop,
+                                         const GeglRectangle  *result,
+                                         gint                  level)
+{
+  GimpOperationPointLayerMode *point;
+
+  point = GIMP_OPERATION_POINT_LAYER_MODE (operation);
+
+  if (point->opacity == 0.0 ||
+      ! gegl_operation_context_get_object (context, "aux"))
+    {
+      GObject *input;
+
+      /* get the raw values this does not increase the reference count */
+      input = gegl_operation_context_get_object (context, "input");
+
+      if (input)
+        {
+          gegl_operation_context_set_object (context, "output", input);
+          return TRUE;
+        }
+    }
+
+  /* chain up, which will create the needed buffers for our actual
+   * process function
+   */
+  return GEGL_OPERATION_CLASS (parent_class)->process (operation, context,
+                                                       output_prop, result,
+                                                       level);
 }

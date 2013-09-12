@@ -32,8 +32,6 @@
 
 #include "widgets/gimpsessioninfo.h"
 
-#include "base/base.h"
-
 #include "config/gimpgeglconfig.h"
 
 #include "core/gimp.h"
@@ -65,19 +63,16 @@ gimp_init_for_testing (void)
   Gimp *gimp;
 
   gimp_log_init ();
+  gegl_init (NULL, NULL);
 
-  gimp = gimp_new ("Unit Tested GIMP", NULL, FALSE, TRUE, TRUE, TRUE,
-                   FALSE, TRUE, TRUE, FALSE);
+  gimp = gimp_new ("Unit Tested GIMP", NULL, NULL, FALSE, TRUE, TRUE, TRUE,
+                   FALSE, FALSE, TRUE, TRUE, FALSE);
 
   units_init (gimp);
 
   gimp_load_config (gimp, NULL, NULL);
 
-  gegl_init(NULL, NULL);
   gimp_gegl_init (gimp);
-  base_init (GIMP_GEGL_CONFIG (gimp->config),
-             FALSE /*be_verbose*/,
-             FALSE /*use_cpu_accel*/);
   gimp_initialize (gimp, gimp_status_func_dummy);
   gimp_restore (gimp, gimp_status_func_dummy);
 
@@ -95,23 +90,19 @@ gimp_init_for_gui_testing_internal (gboolean     show_gui,
   Gimp                 *gimp;
 
   /* from main() */
-  g_type_init();
   gimp_log_init ();
+  gegl_init (NULL, NULL);
 
   /* Introduce an error margin for positions written to sessionrc */
   klass = g_type_class_ref (GIMP_TYPE_SESSION_INFO);
   gimp_session_info_class_set_position_accuracy (klass, 5);
 
   /* from app_run() */
-  gimp = gimp_new ("Unit Tested GIMP", NULL, FALSE, TRUE, TRUE, !show_gui,
-                   FALSE, TRUE, TRUE, FALSE);
+  gimp = gimp_new ("Unit Tested GIMP", NULL, NULL, FALSE, TRUE, TRUE, !show_gui,
+                   FALSE, FALSE, TRUE, TRUE, FALSE);
   gimp_set_show_gui (gimp, show_gui);
   units_init (gimp);
   gimp_load_config (gimp, gimprc, NULL);
-  base_init (GIMP_GEGL_CONFIG (gimp->config),
-             FALSE /*be_verbose*/,
-             FALSE /*use_cpu_accel*/);
-  gegl_init(NULL, NULL);
   gimp_gegl_init (gimp);
   gui_init (gimp, TRUE);
   gimp_initialize (gimp, gimp_status_func_dummy);

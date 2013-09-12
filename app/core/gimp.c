@@ -191,12 +191,14 @@ gimp_init (Gimp *gimp)
 {
   gimp->config           = NULL;
   gimp->session_name     = NULL;
+  gimp->default_folder   = NULL;
 
   gimp->be_verbose       = FALSE;
   gimp->no_data          = FALSE;
   gimp->no_interface     = FALSE;
   gimp->show_gui         = TRUE;
   gimp->use_shm          = FALSE;
+  gimp->use_cpu_accel    = TRUE;
   gimp->message_handler  = GIMP_CONSOLE;
   gimp->stack_trace_mode = GIMP_STACK_TRACE_NEVER;
   gimp->pdb_compat_mode  = GIMP_PDB_COMPAT_OFF;
@@ -453,6 +455,12 @@ gimp_finalize (GObject *object)
     {
       g_object_unref (gimp->edit_config);
       gimp->edit_config = NULL;
+    }
+
+  if (gimp->default_folder)
+    {
+      g_free (gimp->default_folder);
+      gimp->default_folder = NULL;
     }
 
   if (gimp->session_name)
@@ -746,11 +754,13 @@ gimp_real_exit (Gimp     *gimp,
 Gimp *
 gimp_new (const gchar       *name,
           const gchar       *session_name,
+          const gchar       *default_folder,
           gboolean           be_verbose,
           gboolean           no_data,
           gboolean           no_fonts,
           gboolean           no_interface,
           gboolean           use_shm,
+          gboolean           use_cpu_accel,
           gboolean           console_messages,
           GimpStackTraceMode stack_trace_mode,
           GimpPDBCompatMode  pdb_compat_mode)
@@ -764,11 +774,13 @@ gimp_new (const gchar       *name,
                        NULL);
 
   gimp->session_name     = g_strdup (session_name);
+  gimp->default_folder   = g_strdup (default_folder);
   gimp->be_verbose       = be_verbose       ? TRUE : FALSE;
   gimp->no_data          = no_data          ? TRUE : FALSE;
   gimp->no_fonts         = no_fonts         ? TRUE : FALSE;
   gimp->no_interface     = no_interface     ? TRUE : FALSE;
   gimp->use_shm          = use_shm          ? TRUE : FALSE;
+  gimp->use_cpu_accel    = use_cpu_accel    ? TRUE : FALSE;
   gimp->console_messages = console_messages ? TRUE : FALSE;
   gimp->stack_trace_mode = stack_trace_mode;
   gimp->pdb_compat_mode  = pdb_compat_mode;

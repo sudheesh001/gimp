@@ -110,7 +110,7 @@ static void   run       (const gchar      *name,
 
 static gboolean  load_dialog      (TIFF               *tif,
                                    TiffSelectedPages  *pages);
-                                
+
 static gint32    load_image       (const gchar        *filename,
                                    TIFF               *tif,
                                    TiffSelectedPages  *pages,
@@ -130,19 +130,6 @@ static void      load_separate    (TIFF         *tif,
                                    gint          extra);
 static void      load_paths       (TIFF         *tif,
                                    gint          image);
-
-static void      read_separate    (const guchar *source,
-                                   channel_data *channel,
-                                   gushort       bps,
-                                   gint          startcol,
-                                   gint          startrow,
-                                   gint          rows,
-                                   gint          cols,
-                                   gboolean      alpha,
-                                   gint          extra,
-                                   gint          sample);
-
-static void      fill_bit2byte (void);
 
 static void      tiff_warning  (const gchar  *module,
                                 const gchar  *fmt,
@@ -172,8 +159,6 @@ static TiffSaveVals tsvals =
 
 static GimpRunMode             run_mode      = GIMP_RUN_INTERACTIVE;
 static GimpPageSelectorTarget  target        = GIMP_PAGE_SELECTOR_TARGET_LAYERS;
-
-static guchar       bit2byte[256 * 8];
 
 
 MAIN ()
@@ -225,14 +210,13 @@ run (const gchar      *name,
   gint32             image;
   TiffSelectedPages  pages;
 
-  run_mode = param[0].data.d_int32;
-
   INIT_I18N ();
+  gegl_init (NULL, NULL);
+
+  run_mode = param[0].data.d_int32;
 
   *nreturn_vals = 1;
   *return_vals  = values;
-
-  gegl_init (NULL, NULL);
 
   values[0].type          = GIMP_PDB_STATUS;
   values[0].data.d_status = GIMP_PDB_EXECUTION_ERROR;
@@ -541,9 +525,7 @@ load_image (const gchar        *filename,
   gushort       extra, *extra_types;
   channel_data *channel = NULL;
 
-  gushort      *redmap, *greenmap, *bluemap;
   GimpRGB       color;
-  guchar        cmap[768];
 
   uint16  planar = PLANARCONFIG_CONTIG;
 
@@ -699,28 +681,62 @@ load_image (const gchar        *filename,
             {
               image_type = GIMP_GRAY;
               layer_type = (alpha) ? GIMP_GRAYA_IMAGE : GIMP_GRAY_IMAGE;
-              if (bps == 8 && alpha)
-                base_format = babl_format ("Y u8");
-              else if (bps == 8 && !alpha)
-                base_format = babl_format ("Y u8");
-              else if (bps == 16 && alpha)
-                base_format = babl_format ("Y u16");
-              else if (bps == 16 && !alpha)
-                base_format = babl_format ("Y u16");
+
+              if (alpha)
+                {
+                  if (bps == 8)
+                    {
+                      if (tsvals.save_transp_pixels)
+                        base_format = babl_format ("Y'A u8");
+                      else
+                        base_format = babl_format ("Y'aA u8");
+                    }
+                  else if (bps == 16)
+                    {
+                      if (tsvals.save_transp_pixels)
+                        base_format = babl_format ("Y'A u16");
+                      else
+                        base_format = babl_format ("Y'aA u16");
+                    }
+                }
+              else
+                {
+                  if (bps == 8)
+                    base_format     = babl_format ("Y' u8");
+                  else if (bps == 16)
+                    base_format     = babl_format ("Y' u16");
+                }
             }
           break;
 
         case PHOTOMETRIC_RGB:
           image_type = GIMP_RGB;
           layer_type = (alpha) ? GIMP_RGBA_IMAGE : GIMP_RGB_IMAGE;
-          if (bps == 8 && alpha)
-            base_format = babl_format ("RGBA u8");
-          else if (bps == 8 && !alpha)
-            base_format = babl_format ("RGB u8");
-          else if (bps == 16 && alpha)
-            base_format = babl_format ("RGBA u16");
-          else if (bps == 16 && !alpha)
-            base_format = babl_format ("RGB u16");
+
+          if (alpha)
+            {
+              if (bps == 8)
+                {
+                  if (tsvals.save_transp_pixels)
+                    base_format = babl_format ("R'G'B'A u8");
+                  else
+                    base_format = babl_format ("R'aG'aB'aA u8");
+                }
+              else if (bps == 16)
+                {
+                  if (tsvals.save_transp_pixels)
+                    base_format = babl_format ("R'G'B'A u16");
+                  else
+                    base_format = babl_format ("R'aG'aB'aA u16");
+                }
+            }
+          else
+            {
+              if (bps == 8)
+                base_format     = babl_format ("R'G'B' u8");
+              else if (bps == 16)
+                base_format     = babl_format ("R'G'B' u16");
+            }
           break;
 
 #if 0
@@ -736,14 +752,44 @@ load_image (const gchar        *filename,
           break;
         }
 
+      /* attach a parasite containing the compression */
+      if (!TIFFGetField (tif, TIFFTAG_COMPRESSION, &tmp))
+        {
+          save_vals.compression = COMPRESSION_NONE;
+        }
+      else
+        {
+          switch (tmp)
+            {
+            case COMPRESSION_NONE:
+            case COMPRESSION_LZW:
+            case COMPRESSION_PACKBITS:
+            case COMPRESSION_DEFLATE:
+            case COMPRESSION_JPEG:
+            case COMPRESSION_CCITTFAX3:
+            case COMPRESSION_CCITTFAX4:
+              save_vals.compression = tmp;
+              break;
+
+            case COMPRESSION_OJPEG:
+              worst_case = TRUE;
+              save_vals.compression = COMPRESSION_JPEG;
+              break;
+
+            default:
+              save_vals.compression = COMPRESSION_NONE;
+              break;
+            }
+        }
+
       if (worst_case)
         {
           image_type = GIMP_RGB;
           layer_type = GIMP_RGBA_IMAGE;
           if (bps == 8)
-            base_format = babl_format ("RGBA u8");
+            base_format = babl_format ("R'aG'aB'aA u8");
           else if (bps == 16)
-            base_format = babl_format ("RGBA u16");
+            base_format = babl_format ("R'aG'aB'aA u16");
         }
 
       if (target == GIMP_PAGE_SELECTOR_TARGET_LAYERS)
@@ -756,8 +802,12 @@ load_image (const gchar        *filename,
 
       if ((target == GIMP_PAGE_SELECTOR_TARGET_IMAGES) || (! image))
         {
-          if ((image = gimp_image_new_with_precision (cols, rows, image_type,
-                                                      bps <= 8 ? GIMP_PRECISION_U8 : GIMP_PRECISION_U16)) == -1)
+          image = gimp_image_new_with_precision (cols, rows, image_type,
+                                                 bps <= 8 ?
+                                                 GIMP_PRECISION_U8_GAMMA :
+                                                 GIMP_PRECISION_U16_GAMMA);
+
+          if (image < 1)
             {
               g_message ("Could not create a new image: %s",
                          gimp_get_pdb_error ());
@@ -806,31 +856,6 @@ load_image (const gchar        *filename,
           gimp_parasite_free (parasite);
         }
 #endif
-
-      /* attach a parasite containing the compression */
-      if (!TIFFGetField (tif, TIFFTAG_COMPRESSION, &tmp))
-        {
-          save_vals.compression = COMPRESSION_NONE;
-        }
-      else
-        {
-          switch (tmp)
-            {
-            case COMPRESSION_NONE:
-            case COMPRESSION_LZW:
-            case COMPRESSION_PACKBITS:
-            case COMPRESSION_DEFLATE:
-            case COMPRESSION_JPEG:
-            case COMPRESSION_CCITTFAX3:
-            case COMPRESSION_CCITTFAX4:
-              save_vals.compression = tmp;
-              break;
-
-            default:
-              save_vals.compression = COMPRESSION_NONE;
-              break;
-            }
-        }
 
       parasite = gimp_parasite_new ("tiff-save-options", 0,
                                     sizeof (save_vals), &save_vals);
@@ -941,6 +966,8 @@ load_image (const gchar        *filename,
       /* Install colormap for INDEXED images only */
       if (image_type == GIMP_INDEXED)
         {
+          guchar cmap[768];
+
           if (is_bw)
             {
               if (photomet == PHOTOMETRIC_MINISWHITE)
@@ -956,6 +983,8 @@ load_image (const gchar        *filename,
             }
           else
             {
+              gushort *redmap, *greenmap, *bluemap;
+
               if (!TIFFGetField (tif, TIFFTAG_COLORMAP,
                                  &redmap, &greenmap, &bluemap))
                 {
@@ -1466,16 +1495,16 @@ load_contiguous (TIFF         *tif,
                                                       GEGL_RECTANGLE (0, 0, cols, rows),
                                                       GEGL_AUTO_ROWSTRIDE,
                                                       NULL, NULL);
-         
+
           offset = 0;
-         
+
           for (i = 0; i <= extra; i++)
             {
               gint src_bpp, dest_bpp;
-         
+
               src_bpp = babl_format_get_bytes_per_pixel (src_format);
               dest_bpp = babl_format_get_bytes_per_pixel (channel[i].format);
-         
+
               iter = gegl_buffer_iterator_new (src_buf,
                                                GEGL_RECTANGLE (0, 0, cols, rows),
                                                0, NULL,
@@ -1483,15 +1512,15 @@ load_contiguous (TIFF         *tif,
                                                GEGL_ABYSS_NONE);
               gegl_buffer_iterator_add (iter, channel[i].buffer,
                                         GEGL_RECTANGLE (x, y, cols, rows),
-                                        0, NULL,
+                                        0, channel[i].format,
                                         GEGL_BUFFER_WRITE, GEGL_ABYSS_NONE);
-         
+
               while (gegl_buffer_iterator_next (iter))
                 {
                   guchar *s = iter->data[0];
                   guchar *d = iter->data[1];
                   gint length = iter->length;
-         
+
                   s += offset;
 
                   while (length--)
@@ -1501,7 +1530,7 @@ load_contiguous (TIFF         *tif,
                       s += src_bpp;
                     }
                 }
-         
+
               offset += dest_bpp;
             }
 
@@ -1529,7 +1558,7 @@ load_separate (TIFF         *tif,
   GeglBufferIterator *iter;
   guchar *buffer;
   gdouble progress = 0.0, one_row;
-  gint    i;
+  gint    i, compindex;
 
   g_printerr ("%s\n", __func__);
 
@@ -1566,6 +1595,8 @@ load_separate (TIFF         *tif,
   g_printerr ("bytes_per_pixel: %d, format: %d\n", bytes_per_pixel,
               babl_format_get_bytes_per_pixel (src_format));
 
+  compindex = 0;
+
   for (i = 0; i <= extra; i++)
     {
       gint src_bpp, dest_bpp;
@@ -1576,34 +1607,30 @@ load_separate (TIFF         *tif,
       dest_bpp = babl_format_get_bytes_per_pixel (channel[i].format);
 
       offset = 0;
-             
+
       for (j = 0; j < n_comps; j++)
         {
-          g_printerr ("i: %d, j: %d\n", i, j);
-
           for (y = 0; y < imageLength; y += tileLength)
             {
               for (x = 0; x < imageWidth; x += tileWidth)
                 {
-     
                   gimp_progress_update (progress + one_row *
                                         ( (gdouble) x / (gdouble) imageWidth));
-     
-                  /* that sample index is wrong */
+
                   if (TIFFIsTiled (tif))
-                    TIFFReadTile (tif, buffer, x, y, 0, i+j);
+                    TIFFReadTile (tif, buffer, x, y, 0, compindex);
                   else
-                    TIFFReadScanline (tif, buffer, y, i+j);
-     
+                    TIFFReadScanline (tif, buffer, y, compindex);
+
                   cols = MIN (imageWidth - x, tileWidth);
                   rows = MIN (imageLength - y, tileLength);
-     
+
                   src_buf = gegl_buffer_linear_new_from_data (buffer,
                                                               src_format,
                                                               GEGL_RECTANGLE (0, 0, cols, rows),
                                                               GEGL_AUTO_ROWSTRIDE,
                                                               NULL, NULL);
-                 
+
                   iter = gegl_buffer_iterator_new (src_buf,
                                                    GEGL_RECTANGLE (0, 0, cols, rows),
                                                    0, NULL,
@@ -1611,18 +1638,18 @@ load_separate (TIFF         *tif,
                                                    GEGL_ABYSS_NONE);
                   gegl_buffer_iterator_add (iter, channel[i].buffer,
                                             GEGL_RECTANGLE (x, y, cols, rows),
-                                            0, NULL,
+                                            0, channel[i].format,
                                             GEGL_BUFFER_READWRITE,
                                             GEGL_ABYSS_NONE);
-             
+
                   while (gegl_buffer_iterator_next (iter))
                     {
                       guchar *s = iter->data[0];
                       guchar *d = iter->data[1];
                       gint length = iter->length;
-             
+
                       d += offset;
-         
+
                       while (length--)
                         {
                           memcpy (d, s, src_bpp);
@@ -1630,86 +1657,21 @@ load_separate (TIFF         *tif,
                           s += src_bpp;
                         }
                     }
-             
+
                   g_object_unref (src_buf);
                 }
             }
 
           offset += src_bpp;
+          compindex ++;
         }
 
       progress += one_row;
     }
+
+  g_free (buffer);
 }
 
-
-/* Step through all <= 8-bit samples in an image */
-
-#define NEXTSAMPLE(var)                       \
-  {                                           \
-      if (bitsleft == 0)                      \
-      {                                       \
-          source++;                           \
-          bitsleft = 8;                       \
-      }                                       \
-      bitsleft -= bps;                        \
-      var = ( *source >> bitsleft ) & maxval; \
-  }
-
-#if 0
-static void
-read_separate (const guchar *source,
-               channel_data *channel,
-               gushort       bps,
-               gint          startrow,
-               gint          startcol,
-               gint          rows,
-               gint          cols,
-               gboolean      alpha,
-               gint          extra,
-               gint          sample)
-{
-  guchar *dest;
-  gint    col, row, c;
-  gint    bitsleft = 8, maxval = (1 << bps) - 1;
-
-  if (bps > 8)
-    {
-      g_message ("Unsupported layout");
-      gimp_quit ();
-    }
-
-  if (sample < channel[0].drawable->bpp)
-    c = 0;
-  else
-    c = (sample - channel[0].drawable->bpp) + 4;
-
-  gimp_pixel_rgn_init (&(channel[c].pixel_rgn), channel[c].drawable,
-                         startcol, startrow, cols, rows, TRUE, FALSE);
-
-  gimp_pixel_rgn_get_rect (&(channel[c].pixel_rgn), channel[c].pixels,
-                           startcol, startrow, cols, rows);
-
-  for (row = 0; row < rows; ++row)
-    {
-      dest = channel[c].pixels + row * cols * channel[c].drawable->bpp;
-
-      if (c == 0)
-        {
-          for (col = 0; col < cols; ++col)
-            NEXTSAMPLE(dest[col * channel[0].drawable->bpp + sample]);
-        }
-      else
-        {
-          for (col = 0; col < cols; ++col)
-            NEXTSAMPLE(dest[col]);
-        }
-    }
-
-  gimp_pixel_rgn_set_rect (&(channel[c].pixel_rgn), channel[c].pixels,
-                           startcol, startrow, cols, rows);
-}
-#endif
 
 #if 0
 static void

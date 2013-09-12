@@ -165,9 +165,10 @@ gimp_context_list_paint_methods (gint    *num_paint_methods,
   if (success)
     {
       *num_paint_methods = return_vals[1].data.d_int32;
-      *paint_methods = g_new (gchar *, *num_paint_methods);
+      *paint_methods = g_new (gchar *, *num_paint_methods + 1);
       for (i = 0; i < *num_paint_methods; i++)
         (*paint_methods)[i] = g_strdup (return_vals[2].data.d_stringarray[i]);
+      (*paint_methods)[i] = NULL;
     }
 
   gimp_destroy_params (return_vals, nreturn_vals);
@@ -636,33 +637,32 @@ gimp_context_set_brush (const gchar *name)
 
 /**
  * gimp_context_get_brush_size:
- * @size: brush size in pixels.
  *
  * Get brush size in pixels.
  *
  * Get the brush size in pixels for brush based paint tools.
  *
- * Returns: TRUE on success.
+ * Returns: brush size in pixels.
  *
  * Since: GIMP 2.8
  **/
-gboolean
-gimp_context_get_brush_size (gdouble size)
+gdouble
+gimp_context_get_brush_size (void)
 {
   GimpParam *return_vals;
   gint nreturn_vals;
-  gboolean success = TRUE;
+  gdouble size = 0.0;
 
   return_vals = gimp_run_procedure ("gimp-context-get-brush-size",
                                     &nreturn_vals,
-                                    GIMP_PDB_FLOAT, size,
                                     GIMP_PDB_END);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
+    size = return_vals[1].data.d_float;
 
   gimp_destroy_params (return_vals, nreturn_vals);
 
-  return success;
+  return size;
 }
 
 /**
@@ -728,33 +728,32 @@ gimp_context_set_brush_default_size (void)
 
 /**
  * gimp_context_get_brush_aspect_ratio:
- * @aspect: aspect ratio.
  *
  * Get brush aspect ratio.
  *
  * Set the aspect ratio for brush based paint tools.
  *
- * Returns: TRUE on success.
+ * Returns: aspect ratio.
  *
  * Since: GIMP 2.8
  **/
-gboolean
-gimp_context_get_brush_aspect_ratio (gdouble aspect)
+gdouble
+gimp_context_get_brush_aspect_ratio (void)
 {
   GimpParam *return_vals;
   gint nreturn_vals;
-  gboolean success = TRUE;
+  gdouble aspect = 0.0;
 
   return_vals = gimp_run_procedure ("gimp-context-get-brush-aspect-ratio",
                                     &nreturn_vals,
-                                    GIMP_PDB_FLOAT, aspect,
                                     GIMP_PDB_END);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
+    aspect = return_vals[1].data.d_float;
 
   gimp_destroy_params (return_vals, nreturn_vals);
 
-  return success;
+  return aspect;
 }
 
 /**
@@ -790,33 +789,32 @@ gimp_context_set_brush_aspect_ratio (gdouble aspect)
 
 /**
  * gimp_context_get_brush_angle:
- * @angle: angle in degrees.
  *
  * Get brush angle in degrees.
  *
  * Set the angle in degrees for brush based paint tools.
  *
- * Returns: TRUE on success.
+ * Returns: angle in degrees.
  *
  * Since: GIMP 2.8
  **/
-gboolean
-gimp_context_get_brush_angle (gdouble angle)
+gdouble
+gimp_context_get_brush_angle (void)
 {
   GimpParam *return_vals;
   gint nreturn_vals;
-  gboolean success = TRUE;
+  gdouble angle = 0.0;
 
   return_vals = gimp_run_procedure ("gimp-context-get-brush-angle",
                                     &nreturn_vals,
-                                    GIMP_PDB_FLOAT, angle,
                                     GIMP_PDB_END);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
+    angle = return_vals[1].data.d_float;
 
   gimp_destroy_params (return_vals, nreturn_vals);
 
-  return success;
+  return angle;
 }
 
 /**
@@ -1942,13 +1940,9 @@ gimp_context_set_transform_resize (GimpTransformResize transform_resize)
 /**
  * gimp_context_get_transform_recursion:
  *
- * Get the transform supersampling recursion.
+ * Deprecated: There is no replacement for this procedure.
  *
- * This procedure returns the transform supersampling recursion level.
- *
- * Returns: The transform recursion level.
- *
- * Since: GIMP 2.8
+ * Returns: This returns always 3 and is meaningless.
  **/
 gint
 gimp_context_get_transform_recursion (void)
@@ -1971,22 +1965,11 @@ gimp_context_get_transform_recursion (void)
 
 /**
  * gimp_context_set_transform_recursion:
- * @transform_recursion: The transform recursion level.
+ * @transform_recursion: This parameter is ignored.
  *
- * Set the transform supersampling recursion.
- *
- * This procedure modifies the transform supersampling recursion level
- * setting. Whether or not a transformation does supersampling is
- * determined by the interplolation type. The recursion level defaults
- * to 3, which is a nice default value. This setting affects affects
- * the following procedures: gimp_item_transform_flip(),
- * gimp_item_transform_perspective(), gimp_item_transform_rotate(),
- * gimp_item_transform_scale(), gimp_item_transform_shear(),
- * gimp_item_transform_2d(), gimp_item_transform_matrix().
+ * Deprecated: There is no replacement for this procedure.
  *
  * Returns: TRUE on success.
- *
- * Since: GIMP 2.8
  **/
 gboolean
 gimp_context_set_transform_recursion (gint transform_recursion)

@@ -74,7 +74,7 @@ struct _GimpDataPrivate
   guint   dirty     : 1;
   guint   internal  : 1;
   gint    freeze_count;
-  time_t  mtime;
+  gint64  mtime;
 
   /* Identifies the GimpData object across sessions. Used when there
    * is not a filename associated with the object.
@@ -105,6 +105,7 @@ static void      gimp_data_get_property      (GObject             *object,
                                               GValue              *value,
                                               GParamSpec          *pspec);
 
+static void      gimp_data_name_changed      (GimpObject          *object);
 static gint64    gimp_data_get_memsize       (GimpObject          *object,
                                               gint64              *gui_size);
 
@@ -183,6 +184,7 @@ gimp_data_class_init (GimpDataClass *klass)
   object_class->set_property      = gimp_data_set_property;
   object_class->get_property      = gimp_data_get_property;
 
+  gimp_object_class->name_changed = gimp_data_name_changed;
   gimp_object_class->get_memsize  = gimp_data_get_memsize;
 
   klass->dirty                    = gimp_data_real_dirty;
@@ -247,8 +249,7 @@ gimp_data_init (GimpData      *data,
 static void
 gimp_data_constructed (GObject *object)
 {
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   gimp_data_thaw (GIMP_DATA (object));
 }
@@ -350,6 +351,17 @@ gimp_data_get_property (GObject    *object,
     }
 }
 
+static void
+gimp_data_name_changed (GimpObject *object)
+{
+  GimpDataPrivate *private = GIMP_DATA_GET_PRIVATE (object);
+
+  private->dirty = TRUE;
+
+  if (GIMP_OBJECT_CLASS (parent_class)->name_changed)
+    GIMP_OBJECT_CLASS (parent_class)->name_changed (object);
+}
+
 static gint64
 gimp_data_get_memsize (GimpObject *object,
                        gint64     *gui_size)
@@ -366,13 +378,11 @@ gimp_data_get_memsize (GimpObject *object,
 static void
 gimp_data_real_dirty (GimpData *data)
 {
-  GimpDataPrivate *private = GIMP_DATA_GET_PRIVATE (data);
-
-  private->dirty = TRUE;
-
   gimp_viewable_invalidate_preview (GIMP_VIEWABLE (data));
 
-  /* Emit the "name-changed" to signal general dirtiness */
+  /* Emit the "name-changed" to signal general dirtiness, our name
+   * changed implementation will also set the "dirty" flag to TRUE.
+   */
   gimp_object_name_changed (GIMP_OBJECT (data));
 }
 
@@ -520,11 +530,20 @@ gimp_data_save (GimpData  *data,
 
   if (success)
     {
-      struct stat filestat;
+      GFile     *file = g_file_new_for_path (private->filename);
+      GFileInfo *info = g_file_query_info (file, "time::*",
+                                           G_FILE_QUERY_INFO_NONE,
+                                           NULL, NULL);
+      if (info)
+        {
+          private->mtime =
+            g_file_info_get_attribute_uint64 (info,
+                                              G_FILE_ATTRIBUTE_TIME_MODIFIED);
+          g_object_unref (info);
+        }
 
-      g_stat (private->filename, &filestat);
+      g_object_unref (file);
 
-      private->mtime = filestat.st_mtime;
       private->dirty = FALSE;
     }
 
@@ -971,7 +990,7 @@ gimp_data_is_deletable (GimpData *data)
 
 void
 gimp_data_set_mtime (GimpData *data,
-                     time_t    mtime)
+                     gint64    mtime)
 {
   GimpDataPrivate *private;
 
@@ -982,7 +1001,7 @@ gimp_data_set_mtime (GimpData *data,
   private->mtime = mtime;
 }
 
-time_t
+gint64
 gimp_data_get_mtime (GimpData *data)
 {
   GimpDataPrivate *private;

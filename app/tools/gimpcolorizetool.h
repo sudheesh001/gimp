@@ -35,15 +35,7 @@ typedef struct _GimpColorizeToolClass GimpColorizeToolClass;
 
 struct _GimpColorizeTool
 {
-  GimpImageMapTool    parent_instance;
-
-  GimpColorizeConfig *config;
-
-  /*  dialog  */
-  GtkAdjustment      *hue_data;
-  GtkAdjustment      *saturation_data;
-  GtkAdjustment      *lightness_data;
-  GtkWidget          *color_button;
+  GimpImageMapTool  parent_instance;
 };
 
 struct _GimpColorizeToolClass

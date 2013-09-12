@@ -202,11 +202,11 @@ gimp_buffer_get_new_preview (GimpViewable *viewable,
   GimpTempBuf *preview;
 
   if (babl_format_is_palette (format))
-    format = gimp_babl_format (GIMP_RGB, GIMP_PRECISION_U8,
+    format = gimp_babl_format (GIMP_RGB, GIMP_PRECISION_U8_GAMMA,
                                babl_format_has_alpha (format));
   else
     format = gimp_babl_format (gimp_babl_format_get_base_type (format),
-                               GIMP_PRECISION_U8,
+                               GIMP_PRECISION_U8_GAMMA,
                                babl_format_has_alpha (format));
 
   preview = gimp_temp_buf_new (width, height, format);
@@ -249,7 +249,7 @@ gimp_buffer_new (GeglBuffer    *buffer,
                               "name", name,
                               NULL);
 
-  if (TRUE /* XXX FIXME copy_pixels */)
+  if (copy_pixels)
     gimp_buffer->buffer = gegl_buffer_dup (buffer);
   else
     gimp_buffer->buffer = g_object_ref (buffer);

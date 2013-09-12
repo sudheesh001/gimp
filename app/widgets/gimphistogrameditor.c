@@ -261,7 +261,7 @@ gimp_histogram_editor_set_image (GimpImageEditor *image_editor,
 
       if (editor->histogram)
         {
-          gimp_histogram_unref (editor->histogram);
+          g_object_unref (editor->histogram);
           editor->histogram = NULL;
 
           gimp_histogram_view_set_histogram (view, NULL);
@@ -269,7 +269,7 @@ gimp_histogram_editor_set_image (GimpImageEditor *image_editor,
 
       if (editor->bg_histogram)
         {
-          gimp_histogram_unref (editor->bg_histogram);
+          g_object_unref (editor->bg_histogram);
           editor->bg_histogram = NULL;
 
           gimp_histogram_view_set_background (view, NULL);
@@ -280,7 +280,7 @@ gimp_histogram_editor_set_image (GimpImageEditor *image_editor,
 
   if (image)
     {
-      editor->histogram = gimp_histogram_new ();
+      editor->histogram = gimp_histogram_new (TRUE);
 
       gimp_histogram_view_set_histogram (view, editor->histogram);
 
@@ -314,7 +314,7 @@ gimp_histogram_editor_layer_changed (GimpImage           *image,
         {
           GimpHistogramView *view = GIMP_HISTOGRAM_BOX (editor->box)->view;
 
-          gimp_histogram_unref (editor->bg_histogram);
+          g_object_unref (editor->bg_histogram);
           editor->bg_histogram = NULL;
 
           gimp_histogram_view_set_background (view, NULL);
@@ -410,7 +410,7 @@ gimp_histogram_editor_frozen_update (GimpHistogramEditor *editor,
     }
   else if (editor->bg_histogram)
     {
-      gimp_histogram_unref (editor->bg_histogram);
+      g_object_unref (editor->bg_histogram);
       editor->bg_histogram = NULL;
 
       gimp_histogram_view_set_background (view, NULL);
@@ -516,28 +516,31 @@ gimp_histogram_editor_info_update (GimpHistogramEditor *editor)
 
   if (hist)
     {
+      gint    n_bins;
       gdouble pixels;
       gdouble count;
       gchar   text[12];
 
-      pixels = gimp_histogram_get_count (hist, view->channel, 0, 255);
+      n_bins = gimp_histogram_n_bins (hist);
+
+      pixels = gimp_histogram_get_count (hist, view->channel, 0, n_bins - 1);
       count  = gimp_histogram_get_count (hist, view->channel,
                                          view->start, view->end);
 
-      g_snprintf (text, sizeof (text), "%.1f",
+      g_snprintf (text, sizeof (text), "%.3f",
                   gimp_histogram_get_mean (hist, view->channel,
                                            view->start, view->end));
       gtk_label_set_text (GTK_LABEL (editor->labels[0]), text);
 
-      g_snprintf (text, sizeof (text), "%.1f",
+      g_snprintf (text, sizeof (text), "%.3f",
                   gimp_histogram_get_std_dev (hist, view->channel,
                                               view->start, view->end));
       gtk_label_set_text (GTK_LABEL (editor->labels[1]), text);
 
-      g_snprintf (text, sizeof (text), "%.1f",
-                  (gdouble) gimp_histogram_get_median  (hist, view->channel,
-                                                        view->start,
-                                                        view->end));
+      g_snprintf (text, sizeof (text), "%.3f",
+                  gimp_histogram_get_median  (hist, view->channel,
+                                              view->start,
+                                              view->end));
       gtk_label_set_text (GTK_LABEL (editor->labels[2]), text);
 
       g_snprintf (text, sizeof (text), "%d", (gint) pixels);

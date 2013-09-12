@@ -12,8 +12,6 @@ libgimpthumb = $(top_builddir)/libgimpthumb/libgimpthumb-$(GIMP_API_VERSION).la
 # so that when e.g. changing a header-file the subdirs are built in
 # the right order
 SUBDIRS = \
-	base		\
-	paint-funcs	\
 	config		\
 	core		\
 	operations	\
@@ -89,8 +87,12 @@ libapp_a_SOURCES = $(libapp_sources) $(libapp_generated_sources)
 gimp_@GIMP_APP_VERSION@_SOURCES = $(libapp_sources) main.c
 
 
+if PLATFORM_OSX
+framework_carbon = -framework Carbon
+endif
+
 if OS_WIN32
-win32_ldflags = -mwindows $(WIN32_LARGE_ADDRESS_AWARE)
+win32_ldflags = -mwindows -Wl,--tsaware $(WIN32_LARGE_ADDRESS_AWARE)
 endif
 
 if USE_BINRELOC
@@ -105,14 +107,13 @@ endif
 
 AM_CPPFLAGS = \
 	-DG_LOG_DOMAIN=\"Gimp\"		\
-	-DGIMP_APP_GLUE_COMPILATION
-
-INCLUDES = \
-	-I$(top_srcdir)		\
-	$(GTK_CFLAGS)		\
-	$(PANGOCAIRO_CFLAGS)	\
-	$(GEGL_CFLAGS)		\
-	-I$(includedir)
+	-DGIMP_APP_GLUE_COMPILATION	\
+	-I$(top_srcdir)			\
+	$(GTK_CFLAGS)			\
+	$(PANGOCAIRO_CFLAGS)		\
+	$(GEGL_CFLAGS)			\
+	-I$(includedir)			\
+	-I$(builddir)/gui
 
 # FIXME: core should not depend on xcf
 workaround_that_core_depends_on_xcf = \
@@ -130,7 +131,7 @@ workaround_that_plug_in_depends_on_pdb = \
 # FIXME: file should not depend on plug-in
 workaround_that_file_depends_on_plug_in = \
 	-Wl,-u,$(SYMPREFIX)plug_in_icc_profile_apply_rgb	\
-	-Wl,-u,$(SYMPREFIX)gimp_image_map_config_get_type
+	-Wl,-u,$(SYMPREFIX)gimp_settings_get_type
 
 # core, vectors and gegl are on the same architectural layer, prevent
 # the linker from panicing
@@ -140,8 +141,7 @@ calm_down_linker = \
 	-Wl,-u,$(SYMPREFIX)gimp_vectors_prop_undo_get_type	\
 	-Wl,-u,$(SYMPREFIX)gimp_curve_map_pixels		\
 	-Wl,-u,$(SYMPREFIX)gimp_param_spec_duplicate		\
-	-Wl,-u,$(SYMPREFIX)gimp_operations_init			\
-	-Wl,-u,$(SYMPREFIX)smooth_region
+	-Wl,-u,$(SYMPREFIX)gimp_operations_init
 
 AM_LDFLAGS = \
 	$(munix)					\
@@ -164,8 +164,6 @@ gimpconsoleldadd = \
 	operations/libappoperations.a	\
 	gegl/libappgegl.a		\
 	config/libappconfig.a		\
-	paint-funcs/libapppaint-funcs.a	\
-	base/libappbase.a		\
 	$(libgimpconfig)		\
 	$(libgimpmath)			\
 	$(libgimpthumb)			\
@@ -185,6 +183,7 @@ gimpconsoleldadd = \
 gimp_@GIMP_APP_VERSION@_LDFLAGS = \
 	$(AM_LDFLAGS)		\
 	$(win32_ldflags)	\
+	$(framework_carbon)	\
 	-Wl,-u,$(SYMPREFIX)gimp_lebl_dialog
 
 gimp_@GIMP_APP_VERSION@_LDADD = \

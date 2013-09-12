@@ -99,8 +99,7 @@ gimp_profile_chooser_dialog_constructed (GObject *object)
   GimpProfileChooserDialog *dialog = GIMP_PROFILE_CHOOSER_DIALOG (object);
   GtkFileFilter            *filter;
 
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   gtk_window_set_role (GTK_WINDOW (dialog), "gimp-profile-chooser-dialog");
 
@@ -332,7 +331,7 @@ gimp_profile_view_query (GimpProfileChooserDialog *dialog)
                                          &name, &desc, &info,
                                          NULL))
         {
-          gsize info_len = strlen (info);
+          gsize info_len = info ? strlen (info) : 0;
           gsize name_len = strlen (filename);
 
           /*  lcms tends to adds the filename at the end of the info string.
@@ -344,7 +343,7 @@ gimp_profile_view_query (GimpProfileChooserDialog *dialog)
               info_len -= name_len;
             }
 
-          gtk_text_buffer_set_text (dialog->buffer, info, info_len);
+          gtk_text_buffer_set_text (dialog->buffer, info ? info : "", info_len);
 
           if (desc)
             {

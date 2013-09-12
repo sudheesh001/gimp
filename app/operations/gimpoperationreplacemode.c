@@ -28,15 +28,14 @@
 #include "gimpoperationreplacemode.h"
 
 
-static void     gimp_operation_replace_mode_prepare      (GeglOperation       *operation);
-static gboolean gimp_operation_replace_mode_process      (GeglOperation       *operation,
-                                                          void                *in_buf,
-                                                          void                *aux_buf,
-                                                          void                *aux2_buf,
-                                                          void                *out_buf,
-                                                          glong                samples,
-                                                          const GeglRectangle *roi,
-                                                          gint                 level);
+static gboolean gimp_operation_replace_mode_process (GeglOperation       *operation,
+                                                     void                *in_buf,
+                                                     void                *aux_buf,
+                                                     void                *aux2_buf,
+                                                     void                *out_buf,
+                                                     glong                samples,
+                                                     const GeglRectangle *roi,
+                                                     gint                 level);
 
 
 G_DEFINE_TYPE (GimpOperationReplaceMode, gimp_operation_replace_mode,
@@ -57,24 +56,12 @@ gimp_operation_replace_mode_class_init (GimpOperationReplaceModeClass *klass)
                                  "description", "GIMP replace mode operation",
                                  NULL);
 
-  operation_class->prepare = gimp_operation_replace_mode_prepare;
-  point_class->process     = gimp_operation_replace_mode_process;
+  point_class->process = gimp_operation_replace_mode_process;
 }
 
 static void
 gimp_operation_replace_mode_init (GimpOperationReplaceMode *self)
 {
-}
-
-static void
-gimp_operation_replace_mode_prepare (GeglOperation *operation)
-{
-  const Babl *format = babl_format ("RGBA float");
-
-  gegl_operation_set_format (operation, "input",  format);
-  gegl_operation_set_format (operation, "aux",    format);
-  gegl_operation_set_format (operation, "aux2",   babl_format ("Y float"));
-  gegl_operation_set_format (operation, "output", format);
 }
 
 static gboolean
@@ -87,13 +74,21 @@ gimp_operation_replace_mode_process (GeglOperation       *operation,
                                      const GeglRectangle *roi,
                                      gint                 level)
 {
-  GimpOperationPointLayerMode *point   = GIMP_OPERATION_POINT_LAYER_MODE (operation);
-  gfloat                       opacity = point->opacity;
-  gfloat                      *in      = in_buf;
-  gfloat                      *layer   = aux_buf;
-  gfloat                      *mask    = aux2_buf;
-  gfloat                      *out     = out_buf;
+  gfloat opacity = GIMP_OPERATION_POINT_LAYER_MODE (operation)->opacity;
 
+  return gimp_operation_replace_mode_process_pixels (in_buf, aux_buf, aux2_buf, out_buf, opacity, samples, roi, level);
+}
+
+gboolean
+gimp_operation_replace_mode_process_pixels (gfloat              *in,
+                                            gfloat              *layer,
+                                            gfloat              *mask,
+                                            gfloat              *out,
+                                            gfloat               opacity,
+                                            glong                samples,
+                                            const GeglRectangle *roi,
+                                            gint                 level)
+{
   while (samples--)
     {
       gint   b;

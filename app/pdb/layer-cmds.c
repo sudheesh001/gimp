@@ -316,7 +316,8 @@ layer_add_alpha_invoker (GimpProcedure         *procedure,
 
   if (success)
     {
-      if (gimp_pdb_item_is_writable (GIMP_ITEM (layer), error) &&
+      if (gimp_pdb_item_is_modifyable (GIMP_ITEM (layer),
+                                       GIMP_PDB_ITEM_CONTENT, error) &&
           gimp_pdb_item_is_not_group (GIMP_ITEM (layer), error))
         gimp_layer_add_alpha (layer);
       else
@@ -342,7 +343,8 @@ layer_flatten_invoker (GimpProcedure         *procedure,
 
   if (success)
     {
-      if (gimp_pdb_item_is_writable (GIMP_ITEM (layer), error) &&
+      if (gimp_pdb_item_is_modifyable (GIMP_ITEM (layer),
+                                       GIMP_PDB_ITEM_CONTENT, error) &&
           gimp_pdb_item_is_not_group (GIMP_ITEM (layer), error))
         gimp_layer_flatten (layer, context);
       else
@@ -374,7 +376,9 @@ layer_scale_invoker (GimpProcedure         *procedure,
 
   if (success)
     {
-      if (gimp_pdb_item_is_attached (GIMP_ITEM (layer), NULL, TRUE, error))
+      if (gimp_pdb_item_is_attached (GIMP_ITEM (layer), NULL,
+                                     GIMP_PDB_ITEM_CONTENT | GIMP_PDB_ITEM_POSITION,
+                                     error))
         {
           GimpPDBContext *pdb_context = GIMP_PDB_CONTEXT (context);
 
@@ -421,7 +425,9 @@ layer_scale_full_invoker (GimpProcedure         *procedure,
 
   if (success)
     {
-      if (gimp_pdb_item_is_attached (GIMP_ITEM (layer), NULL, TRUE, error))
+      if (gimp_pdb_item_is_attached (GIMP_ITEM (layer), NULL,
+                                     GIMP_PDB_ITEM_CONTENT | GIMP_PDB_ITEM_POSITION,
+                                     error))
         {
           if (progress)
             gimp_progress_start (progress, _("Scaling"), FALSE);
@@ -466,7 +472,9 @@ layer_resize_invoker (GimpProcedure         *procedure,
 
   if (success)
     {
-      if (gimp_pdb_item_is_attached (GIMP_ITEM (layer), NULL, TRUE, error))
+      if (gimp_pdb_item_is_attached (GIMP_ITEM (layer), NULL,
+                                     GIMP_PDB_ITEM_CONTENT | GIMP_PDB_ITEM_POSITION,
+                                     error))
         gimp_item_resize (GIMP_ITEM (layer), context,
                           new_width, new_height, offx, offy);
       else
@@ -492,7 +500,9 @@ layer_resize_to_image_size_invoker (GimpProcedure         *procedure,
 
   if (success)
     {
-      if (gimp_pdb_item_is_attached (GIMP_ITEM (layer), NULL, TRUE, error))
+      if (gimp_pdb_item_is_attached (GIMP_ITEM (layer), NULL,
+                                     GIMP_PDB_ITEM_CONTENT | GIMP_PDB_ITEM_POSITION,
+                                     error))
         gimp_layer_resize_to_image (layer, context);
       else
         success = FALSE;
@@ -521,17 +531,23 @@ layer_translate_invoker (GimpProcedure         *procedure,
 
   if (success)
     {
-      GimpImage *image = gimp_item_get_image (GIMP_ITEM (layer));
+      if (gimp_pdb_item_is_modifyable (GIMP_ITEM (layer),
+                                       GIMP_PDB_ITEM_POSITION, error))
+        {
+          GimpImage *image = gimp_item_get_image (GIMP_ITEM (layer));
 
-      gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_ITEM_DISPLACE,
-                                   _("Move Layer"));
+          gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_ITEM_DISPLACE,
+                                       _("Move Layer"));
 
-      gimp_item_translate (GIMP_ITEM (layer), offx, offy, TRUE);
+          gimp_item_translate (GIMP_ITEM (layer), offx, offy, TRUE);
 
-      if (gimp_item_get_linked (GIMP_ITEM (layer)))
-        gimp_item_linked_translate (GIMP_ITEM (layer), offx, offy, TRUE);
+          if (gimp_item_get_linked (GIMP_ITEM (layer)))
+            gimp_item_linked_translate (GIMP_ITEM (layer), offx, offy, TRUE);
 
-      gimp_image_undo_group_end (image);
+          gimp_image_undo_group_end (image);
+        }
+      else
+        success = FALSE;
     }
 
   return gimp_procedure_get_return_values (procedure, success,
@@ -557,23 +573,29 @@ layer_set_offsets_invoker (GimpProcedure         *procedure,
 
   if (success)
     {
-      GimpImage *image = gimp_item_get_image (GIMP_ITEM (layer));
-      gint       offset_x;
-      gint       offset_y;
+      if (gimp_pdb_item_is_modifyable (GIMP_ITEM (layer),
+                                       GIMP_PDB_ITEM_POSITION, error))
+        {
+          GimpImage *image = gimp_item_get_image (GIMP_ITEM (layer));
+          gint       offset_x;
+          gint       offset_y;
 
-      gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_ITEM_DISPLACE,
-                                   _("Move Layer"));
+          gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_ITEM_DISPLACE,
+                                       _("Move Layer"));
 
-      gimp_item_get_offset (GIMP_ITEM (layer), &offset_x, &offset_y);
-      offx -= offset_x;
-      offy -= offset_y;
+          gimp_item_get_offset (GIMP_ITEM (layer), &offset_x, &offset_y);
+          offx -= offset_x;
+          offy -= offset_y;
 
-      gimp_item_translate (GIMP_ITEM (layer), offx, offy, TRUE);
+          gimp_item_translate (GIMP_ITEM (layer), offx, offy, TRUE);
 
-      if (gimp_item_get_linked (GIMP_ITEM (layer)))
-        gimp_item_linked_translate (GIMP_ITEM (layer), offx, offy, TRUE);
+          if (gimp_item_get_linked (GIMP_ITEM (layer)))
+            gimp_item_linked_translate (GIMP_ITEM (layer), offx, offy, TRUE);
 
-      gimp_image_undo_group_end (image);
+          gimp_image_undo_group_end (image);
+        }
+      else
+        success = FALSE;
     }
 
   return gimp_procedure_get_return_values (procedure, success,
@@ -732,7 +754,12 @@ layer_remove_mask_invoker (GimpProcedure         *procedure,
 
   if (success)
     {
-      if (gimp_pdb_item_is_attached (GIMP_ITEM (layer), NULL, mode == GIMP_MASK_APPLY, error) &&
+      GimpPDBItemModify modify = 0;
+
+      if (mode == GIMP_MASK_APPLY)
+        modify |= GIMP_PDB_ITEM_CONTENT;
+
+      if (gimp_pdb_item_is_attached (GIMP_ITEM (layer), NULL, modify, error) &&
           gimp_layer_get_mask (layer))
         gimp_layer_apply_mask (layer, mode, TRUE);
       else
@@ -1608,7 +1635,7 @@ register_layer_procs (GimpPDB *pdb)
                                "gimp-layer-create-mask");
   gimp_procedure_set_static_strings (procedure,
                                      "gimp-layer-create-mask",
-                                     "Create a layer mask for the specified specified layer.",
+                                     "Create a layer mask for the specified layer.",
                                      "This procedure creates a layer mask for the specified layer. Layer masks serve as an additional alpha channel for a layer. A number of different types of masks are allowed for initialisation: completely white masks (which will leave the layer fully visible), completely black masks (which will give the layer complete transparency, the layer's already existing alpha channel (which will leave the layer fully visible, but which may be more useful than a white mask), the current selection or a grayscale copy of the layer. The layer mask still needs to be added to the layer. This can be done with a call to 'gimp-layer-add-mask'.",
                                      "Spencer Kimball & Peter Mattis",
                                      "Spencer Kimball & Peter Mattis",

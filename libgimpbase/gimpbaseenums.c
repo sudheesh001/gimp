@@ -354,12 +354,14 @@ gimp_foreground_extract_mode_get_type (void)
   static const GEnumValue values[] =
   {
     { GIMP_FOREGROUND_EXTRACT_SIOX, "GIMP_FOREGROUND_EXTRACT_SIOX", "siox" },
+    { GIMP_FOREGROUND_EXTRACT_MATTING, "GIMP_FOREGROUND_EXTRACT_MATTING", "matting" },
     { 0, NULL, NULL }
   };
 
   static const GimpEnumDesc descs[] =
   {
     { GIMP_FOREGROUND_EXTRACT_SIOX, "GIMP_FOREGROUND_EXTRACT_SIOX", NULL },
+    { GIMP_FOREGROUND_EXTRACT_MATTING, "GIMP_FOREGROUND_EXTRACT_MATTING", NULL },
     { 0, NULL, NULL }
   };
 
@@ -570,6 +572,7 @@ gimp_interpolation_type_get_type (void)
     { GIMP_INTERPOLATION_NONE, "GIMP_INTERPOLATION_NONE", "none" },
     { GIMP_INTERPOLATION_LINEAR, "GIMP_INTERPOLATION_LINEAR", "linear" },
     { GIMP_INTERPOLATION_CUBIC, "GIMP_INTERPOLATION_CUBIC", "cubic" },
+    { GIMP_INTERPOLATION_NOHALO, "GIMP_INTERPOLATION_NOHALO", "nohalo" },
     { GIMP_INTERPOLATION_LOHALO, "GIMP_INTERPOLATION_LOHALO", "lohalo" },
     { 0, NULL, NULL }
   };
@@ -579,6 +582,7 @@ gimp_interpolation_type_get_type (void)
     { GIMP_INTERPOLATION_NONE, NC_("interpolation-type", "None"), NULL },
     { GIMP_INTERPOLATION_LINEAR, NC_("interpolation-type", "Linear"), NULL },
     { GIMP_INTERPOLATION_CUBIC, NC_("interpolation-type", "Cubic"), NULL },
+    { GIMP_INTERPOLATION_NOHALO, NC_("interpolation-type", "NoHalo"), NULL },
     { GIMP_INTERPOLATION_LOHALO, NC_("interpolation-type", "LoHalo"), NULL },
     { 0, NULL, NULL }
   };

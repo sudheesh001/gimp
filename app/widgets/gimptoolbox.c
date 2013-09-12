@@ -99,8 +99,6 @@ static void        gimp_toolbox_get_property            (GObject        *object,
                                                          GParamSpec     *pspec);
 static void        gimp_toolbox_size_allocate           (GtkWidget      *widget,
                                                          GtkAllocation  *allocation);
-static void        gimp_toolbox_style_set               (GtkWidget      *widget,
-                                                         GtkStyle       *previous_style);
 static gboolean    gimp_toolbox_button_press_event      (GtkWidget      *widget,
                                                          GdkEventButton *event);
 static void        gimp_toolbox_drag_leave              (GtkWidget      *widget,
@@ -141,9 +139,6 @@ static GtkWidget * toolbox_create_image_area            (GimpToolbox    *toolbox
 static void        toolbox_area_notify                  (GimpGuiConfig  *config,
                                                          GParamSpec     *pspec,
                                                          GtkWidget      *area);
-static void        toolbox_wilber_notify                (GimpGuiConfig  *config,
-                                                         GParamSpec     *pspec,
-                                                         GtkWidget      *wilber);
 static void        toolbox_paste_received               (GtkClipboard   *clipboard,
                                                          const gchar    *text,
                                                          gpointer        data);
@@ -167,7 +162,6 @@ gimp_toolbox_class_init (GimpToolboxClass *klass)
   object_class->get_property          = gimp_toolbox_get_property;
 
   widget_class->size_allocate         = gimp_toolbox_size_allocate;
-  widget_class->style_set             = gimp_toolbox_style_set;
   widget_class->button_press_event    = gimp_toolbox_button_press_event;
 
   dock_class->get_description         = gimp_toolbox_get_description;
@@ -243,8 +237,9 @@ gimp_toolbox_constructed (GObject *object)
   gtk_box_pack_start (GTK_BOX (toolbox->p->vbox), toolbox->p->header,
                       FALSE, FALSE, 0);
 
-  if (config->toolbox_wilber)
-    gtk_widget_show (toolbox->p->header);
+  g_object_bind_property (config,             "toolbox-wilber",
+                          toolbox->p->header, "visible",
+                          G_BINDING_SYNC_CREATE);
 
   g_signal_connect (toolbox->p->header, "size-request",
                     G_CALLBACK (gimp_toolbox_size_request_wilber),
@@ -255,10 +250,6 @@ gimp_toolbox_constructed (GObject *object)
 
   gimp_help_set_help_data (toolbox->p->header,
                            _("Drop image files here to open them"), NULL);
-
-  g_signal_connect_object (config, "notify::toolbox-wilber",
-                           G_CALLBACK (toolbox_wilber_notify),
-                           toolbox->p->header, 0);
 
   toolbox->p->tool_palette = gimp_tool_palette_new ();
   gimp_tool_palette_set_toolbox (GIMP_TOOL_PALETTE (toolbox->p->tool_palette),
@@ -330,9 +321,6 @@ gimp_toolbox_constructed (GObject *object)
                            toolbox->p->image_area, 0);
 
   gimp_toolbox_dnd_init (GIMP_TOOLBOX (toolbox), toolbox->p->vbox);
-
-  gimp_toolbox_style_set (GTK_WIDGET (toolbox),
-                          gtk_widget_get_style (GTK_WIDGET (toolbox)));
 }
 
 static void
@@ -442,15 +430,6 @@ gimp_toolbox_size_allocate (GtkWidget     *widget,
       gtk_widget_set_size_request (toolbox->p->area_wbox, -1,
                                    area_rows * height);
     }
-}
-
-static void
-gimp_toolbox_style_set (GtkWidget *widget,
-                        GtkStyle  *previous_style)
-{
-  GTK_WIDGET_CLASS (parent_class)->style_set (widget, previous_style);
-
-  gimp_dock_invalidate_geometry (GIMP_DOCK (widget));
 }
 
 static gboolean
@@ -785,17 +764,6 @@ toolbox_area_notify (GimpGuiConfig *config,
 
   g_object_get (config, pspec->name, &visible, NULL);
   g_object_set (area, "visible", visible, NULL);
-}
-
-static void
-toolbox_wilber_notify (GimpGuiConfig *config,
-                       GParamSpec    *pspec,
-                       GtkWidget     *wilber)
-{
-  gboolean   visible;
-
-  g_object_get (config, pspec->name, &visible, NULL);
-  g_object_set (wilber, "visible", visible, NULL);
 }
 
 static void

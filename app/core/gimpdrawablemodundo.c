@@ -97,8 +97,7 @@ gimp_drawable_mod_undo_constructed (GObject *object)
   GimpItem            *item;
   GimpDrawable        *drawable;
 
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   g_assert (GIMP_IS_DRAWABLE (GIMP_ITEM_UNDO (object)->item));
 
@@ -108,7 +107,7 @@ gimp_drawable_mod_undo_constructed (GObject *object)
   if (drawable_mod_undo->copy_buffer)
     {
       drawable_mod_undo->buffer =
-        gimp_gegl_buffer_dup (gimp_drawable_get_buffer (drawable));
+        gegl_buffer_dup (gimp_drawable_get_buffer (drawable));
     }
   else
     {

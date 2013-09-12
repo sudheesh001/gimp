@@ -21,26 +21,6 @@
 
 #include "config.h"
 
-#include <string.h>
-#include <errno.h>
-
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-
-#ifdef HAVE_UNISTD_H
-#include <unistd.h>
-#endif
-
-#include <glib/gstdio.h>
-#ifdef G_OS_WIN32
-#include <libgimpbase/gimpwin32-io.h>
-#endif
-
-#ifndef _O_BINARY
-#define _O_BINARY 0
-#endif
-
 #include <libgimp/gimp.h>
 #include <libgimp/gimpui.h>
 
@@ -63,9 +43,9 @@ static void       run            (const gchar      *name,
                                   const GimpParam  *param,
                                   gint             *nreturn_vals,
                                   GimpParam       **return_vals);
-static gint32     load_image     (const gchar      *filename,
+static gint32     load_image     (GFile            *file,
                                   GError          **error);
-static gboolean   save_image     (const gchar      *filename,
+static gboolean   save_image     (GFile            *file,
                                   gint32            image_ID,
                                   gint32            drawable_ID,
                                   GError          **error);
@@ -94,9 +74,9 @@ query (void)
 {
   static const GimpParamDef load_args[] =
   {
-    { GIMP_PDB_INT32,  "run-mode",     "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }" },
-    { GIMP_PDB_STRING, "filename",     "The name of the file to load" },
-    { GIMP_PDB_STRING, "raw-filename", "The name of the file to load" }
+    { GIMP_PDB_INT32,  "run-mode", "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }" },
+    { GIMP_PDB_STRING, "uri",      "The URI of the file to load" },
+    { GIMP_PDB_STRING, "raw-uri",  "The URI of the file to load" }
   };
   static const GimpParamDef load_return_vals[] =
   {
@@ -105,12 +85,12 @@ query (void)
 
   static const GimpParamDef save_args[] =
   {
-    { GIMP_PDB_INT32,    "run-mode",     "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }"     },
-    { GIMP_PDB_IMAGE,    "image",        "Input image"                      },
-    { GIMP_PDB_DRAWABLE, "drawable",     "Drawable to save"                 },
-    { GIMP_PDB_STRING,   "filename",     "The name of the file to save the image in" },
-    { GIMP_PDB_STRING,   "raw-filename", "The name of the file to save the image in" },
-    { GIMP_PDB_STRING,   "description",  "Short description of the pattern" }
+    { GIMP_PDB_INT32,    "run-mode",    "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }"     },
+    { GIMP_PDB_IMAGE,    "image",       "Input image"                      },
+    { GIMP_PDB_DRAWABLE, "drawable",    "Drawable to save"                 },
+    { GIMP_PDB_STRING,   "uri",         "The URI of the file to save the image in" },
+    { GIMP_PDB_STRING,   "raw-uri",     "The URI of the file to save the image in" },
+    { GIMP_PDB_STRING,   "description", "Short description of the pattern" }
   };
 
   gimp_install_procedure (LOAD_PROC,
@@ -130,6 +110,7 @@ query (void)
   gimp_plugin_icon_register (LOAD_PROC, GIMP_ICON_TYPE_STOCK_ID,
                              (const guint8 *) GIMP_STOCK_PATTERN);
   gimp_register_file_handler_mime (LOAD_PROC, "image/x-gimp-pat");
+  gimp_register_file_handler_uri (LOAD_PROC);
   gimp_register_magic_load_handler (LOAD_PROC,
                                     "pat",
                                     "",
@@ -143,7 +124,7 @@ query (void)
                           "Tim Newsome",
                           "1997",
                           N_("GIMP pattern"),
-                          "RGB*, GRAY*",
+                          "RGB*, GRAY*, INDEXED*",
                           GIMP_PLUGIN,
                           G_N_ELEMENTS (save_args), 0,
                           save_args, NULL);
@@ -151,6 +132,7 @@ query (void)
   gimp_plugin_icon_register (SAVE_PROC, GIMP_ICON_TYPE_STOCK_ID,
                              (const guint8 *) GIMP_STOCK_PATTERN);
   gimp_register_file_handler_mime (SAVE_PROC, "image/x-gimp-pat");
+  gimp_register_file_handler_uri (SAVE_PROC);
   gimp_register_save_handler (SAVE_PROC, "pat", "");
 }
 
@@ -169,21 +151,21 @@ run (const gchar      *name,
   GimpExportReturn   export = GIMP_EXPORT_CANCEL;
   GError            *error  = NULL;
 
+  INIT_I18N ();
+  gegl_init (NULL, NULL);
+
   run_mode = param[0].data.d_int32;
 
   *nreturn_vals = 1;
   *return_vals  = values;
 
-  gegl_init (NULL, NULL);
-
   values[0].type          = GIMP_PDB_STATUS;
   values[0].data.d_status = GIMP_PDB_EXECUTION_ERROR;
 
-  INIT_I18N ();
-
   if (strcmp (name, LOAD_PROC) == 0)
     {
-      image_ID = load_image (param[1].data.d_string, &error);
+      image_ID = load_image (g_file_new_for_uri (param[1].data.d_string),
+                             &error);
 
       if (image_ID != -1)
         {
@@ -212,8 +194,9 @@ run (const gchar      *name,
         case GIMP_RUN_WITH_LAST_VALS:
           gimp_ui_init (PLUG_IN_BINARY, FALSE);
           export = gimp_export_image (&image_ID, &drawable_ID, NULL,
-                                      GIMP_EXPORT_CAN_HANDLE_GRAY |
-                                      GIMP_EXPORT_CAN_HANDLE_RGB |
+                                      GIMP_EXPORT_CAN_HANDLE_GRAY    |
+                                      GIMP_EXPORT_CAN_HANDLE_RGB     |
+                                      GIMP_EXPORT_CAN_HANDLE_INDEXED |
                                       GIMP_EXPORT_CAN_HANDLE_ALPHA);
           if (export == GIMP_EXPORT_CANCEL)
             {
@@ -268,8 +251,8 @@ run (const gchar      *name,
 
       if (status == GIMP_PDB_SUCCESS)
         {
-          if (save_image (param[3].data.d_string, image_ID, drawable_ID,
-                          &error))
+          if (save_image (g_file_new_for_uri (param[3].data.d_string),
+                          image_ID, drawable_ID, &error))
             {
               gimp_set_data (SAVE_PROC, description, sizeof (description));
             }
@@ -314,10 +297,10 @@ run (const gchar      *name,
 }
 
 static gint32
-load_image (const gchar  *filename,
-            GError      **error)
+load_image (GFile   *file,
+            GError **error)
 {
-  gint              fd;
+  GInputStream     *input;
   PatternHeader     ph;
   gchar            *name;
   gchar            *temp;
@@ -330,23 +313,20 @@ load_image (const gchar  *filename,
   gint              line;
   GimpImageBaseType base_type;
   GimpImageType     image_type;
+  gsize             bytes_read;
 
-  fd = g_open (filename, O_RDONLY | _O_BINARY, 0);
-
-  if (fd == -1)
-    {
-      g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (errno),
-                   _("Could not open '%s' for reading: %s"),
-                   gimp_filename_to_utf8 (filename), g_strerror (errno));
-      return -1;
-    }
+  input = G_INPUT_STREAM (g_file_read (file, NULL, error));
+  if (! input)
+    return -1;
 
   gimp_progress_init_printf (_("Opening '%s'"),
-                             gimp_filename_to_utf8 (filename));
+                             g_file_get_parse_name (file));
 
-  if (read (fd, &ph, sizeof (PatternHeader)) != sizeof (PatternHeader))
+  if (! g_input_stream_read_all (input, &ph, sizeof (PatternHeader),
+                                 &bytes_read, NULL, error) ||
+      bytes_read != sizeof (PatternHeader))
     {
-      close (fd);
+      g_object_unref (input);
       return -1;
     }
 
@@ -362,23 +342,25 @@ load_image (const gchar  *filename,
       ph.version      != 1 ||
       ph.header_size  <= sizeof (PatternHeader))
     {
-      close (fd);
+      g_object_unref (input);
       return -1;
     }
 
   temp = g_new (gchar, ph.header_size - sizeof (PatternHeader));
 
-  if (read (fd, temp, ph.header_size - sizeof (PatternHeader)) !=
-      ph.header_size - sizeof (PatternHeader))
+  if (! g_input_stream_read_all (input,
+                                 temp, ph.header_size - sizeof (PatternHeader),
+                                 &bytes_read, NULL, error) ||
+      bytes_read != ph.header_size - sizeof (PatternHeader))
     {
       g_free (temp);
-      close (fd);
+      g_object_unref (input);
       return -1;
     }
 
   name = gimp_any_to_utf8 (temp, -1,
                            _("Invalid UTF-8 string in pattern file '%s'."),
-                           gimp_filename_to_utf8 (filename));
+                           g_file_get_parse_name (file));
   g_free (temp);
 
   /* Now there's just raw data left. */
@@ -412,6 +394,7 @@ load_image (const gchar  *filename,
     default:
       g_message ("Unsupported pattern depth: %d\n"
                  "GIMP Patterns must be GRAY or RGB", ph.bytes);
+      g_object_unref (input);
       return -1;
     }
 
@@ -422,14 +405,15 @@ load_image (const gchar  *filename,
     {
       g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
                    _("Invalid header data in '%s': width=%lu, height=%lu, "
-                     "bytes=%lu"), gimp_filename_to_utf8 (filename),
+                     "bytes=%lu"), g_file_get_parse_name (file),
                    (unsigned long int)ph.width, (unsigned long int)ph.height,
                    (unsigned long int)ph.bytes);
+      g_object_unref (input);
       return -1;
     }
 
   image_ID = gimp_image_new (ph.width, ph.height, base_type);
-  gimp_image_set_filename (image_ID, filename);
+  gimp_image_set_filename (image_ID, g_file_get_uri (file));
 
   parasite = gimp_parasite_new ("gimp-pattern-name",
                                 GIMP_PARASITE_PERSISTENT,
@@ -450,12 +434,24 @@ load_image (const gchar  *filename,
 
   for (line = 0; line < ph.height; line++)
     {
-      if (read (fd, buf, ph.width * ph.bytes) != ph.width * ph.bytes)
+      if (! g_input_stream_read_all (input, buf, ph.width * ph.bytes,
+                                     &bytes_read, NULL, error) ||
+          bytes_read != ph.width * ph.bytes)
         {
-          close (fd);
-          g_free (buf);
-          g_object_unref (buffer);
-          return -1;
+          if (line == 0)
+            {
+              g_free (buf);
+              g_object_unref (buffer);
+              g_object_unref (input);
+              return -1;
+            }
+          else
+            {
+              g_message ("GIMP Pattern file is truncated "
+                         "(%d of %d lines recovered).",
+                         line - 1, ph.height);
+              break;
+            }
         }
 
       gegl_buffer_set (buffer, GEGL_RECTANGLE (0, line, ph.width, 1), 0,
@@ -464,21 +460,22 @@ load_image (const gchar  *filename,
       gimp_progress_update ((gdouble) line / (gdouble) ph.height);
     }
 
-  gimp_progress_update (1.0);
-
   g_free (buf);
   g_object_unref (buffer);
+  g_object_unref (input);
+
+  gimp_progress_update (1.0);
 
   return image_ID;
 }
 
 static gboolean
-save_image (const gchar  *filename,
-            gint32        image_ID,
-            gint32        drawable_ID,
-            GError      **error)
+save_image (GFile   *file,
+            gint32   image_ID,
+            gint32   drawable_ID,
+            GError **error)
 {
-  gint           fd;
+  GOutputStream *output;
   PatternHeader  ph;
   GeglBuffer    *buffer;
   const Babl    *file_format;
@@ -487,31 +484,28 @@ save_image (const gchar  *filename,
   gint           height;
   gint           line_size;
   gint           line;
-
-  fd = g_open (filename, O_CREAT | O_TRUNC | O_WRONLY | _O_BINARY, 0666);
-
-  if (fd == -1)
-    {
-      g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (errno),
-                   _("Could not open '%s' for writing: %s"),
-                   gimp_filename_to_utf8 (filename), g_strerror (errno));
-      return FALSE;
-    }
+  gsize          bytes_written;
 
   switch (gimp_drawable_type (drawable_ID))
     {
     case GIMP_GRAY_IMAGE:
       file_format = babl_format ("Y' u8");
       break;
+
     case GIMP_GRAYA_IMAGE:
       file_format = babl_format ("Y'A u8");
       break;
+
     case GIMP_RGB_IMAGE:
+    case GIMP_INDEXED_IMAGE:
       file_format = babl_format ("R'G'B' u8");
       break;
+
     case GIMP_RGBA_IMAGE:
+    case GIMP_INDEXEDA_IMAGE:
       file_format = babl_format ("R'G'B'A u8");
       break;
+
     default:
       g_message ("Unsupported image type: %d\n"
                  "GIMP Patterns must be GRAY or RGB",
@@ -519,8 +513,12 @@ save_image (const gchar  *filename,
       return FALSE;
     }
 
+  output = G_OUTPUT_STREAM (g_file_replace (file, NULL, FALSE, 0, NULL, error));
+  if (! output)
+    return FALSE;
+
   gimp_progress_init_printf (_("Saving '%s'"),
-                             gimp_filename_to_utf8 (filename));
+                             g_file_get_parse_name (file));
 
   buffer = gimp_drawable_get_buffer (drawable_ID);
 
@@ -534,15 +532,20 @@ save_image (const gchar  *filename,
   ph.bytes        = g_htonl (babl_format_get_bytes_per_pixel (file_format));
   ph.magic_number = g_htonl (GPATTERN_MAGIC);
 
-  if (write (fd, &ph, sizeof (PatternHeader)) != sizeof (PatternHeader))
+  if (! g_output_stream_write_all (output, &ph, sizeof (PatternHeader),
+                                   &bytes_written, NULL, error) ||
+      bytes_written != sizeof (PatternHeader))
     {
-      close (fd);
+      g_object_unref (output);
       return FALSE;
     }
 
-  if (write (fd, description, strlen (description) + 1) != strlen (description) + 1)
+  if (! g_output_stream_write_all (output,
+                                   description, strlen (description) + 1,
+                                   &bytes_written, NULL, error) ||
+      bytes_written != strlen (description) + 1)
     {
-      close (fd);
+      g_object_unref (output);
       return FALSE;
     }
 
@@ -557,16 +560,22 @@ save_image (const gchar  *filename,
                        file_format, buf,
                        GEGL_AUTO_ROWSTRIDE, GEGL_ABYSS_NONE);
 
-      if (write (fd, buf, line_size) != line_size)
+      if (! g_output_stream_write_all (output, buf, line_size,
+                                       &bytes_written, NULL, error) ||
+          bytes_written != line_size)
         {
-          close (fd);
+          g_object_unref (buffer);
+          g_object_unref (output);
           return FALSE;
         }
 
       gimp_progress_update ((gdouble) line / (gdouble) ph.height);
     }
 
-  close (fd);
+  g_object_unref (buffer);
+  g_object_unref (output);
+
+  gimp_progress_update (1.0);
 
   return TRUE;
 }

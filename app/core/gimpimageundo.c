@@ -150,8 +150,7 @@ gimp_image_undo_constructed (GObject *object)
   GimpImageUndo *image_undo = GIMP_IMAGE_UNDO (object);
   GimpImage     *image;
 
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   image = GIMP_UNDO (object)->image;
 
@@ -433,9 +432,12 @@ gimp_image_undo_pop (GimpUndo            *undo,
         colormap   = g_memdup (gimp_image_get_colormap (image),
                                GIMP_IMAGE_COLORMAP_SIZE);
 
-        gimp_image_set_colormap (image,
-                                 image_undo->colormap, image_undo->num_colors,
-                                 FALSE);
+        if (image_undo->colormap)
+          gimp_image_set_colormap (image,
+                                   image_undo->colormap, image_undo->num_colors,
+                                   FALSE);
+        else
+          gimp_image_unset_colormap (image, FALSE);
 
         if (image_undo->colormap)
           g_free (image_undo->colormap);

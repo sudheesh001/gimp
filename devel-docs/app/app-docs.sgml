@@ -233,7 +233,6 @@
       <xi:include href="xml/gimpitemstack.xml" />
       <xi:include href="xml/gimpdrawablestack.xml" />
       <xi:include href="xml/gimpdocumentlist.xml" />
-      <xi:include href="xml/gimptoolpresets.xml" />
       <xi:include href="xml/gimpitemtree.xml" />
       <xi:include href="xml/gimptreehandler.xml" />
     </chapter>
@@ -272,7 +271,7 @@
       <title>GimpData Objects</title>
 
       <para>
-        Object hierarchy of auxilary data objects which share a common
+        Object hierarchy of auxiliary data objects which share a common
         API. Data objects have an on-disk representation and live in a
         <link linkend="GimpDataFactory">GimpDataFactory</link> which
         manages them.

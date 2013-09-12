@@ -25,7 +25,6 @@
 #include "libgimpmodule/gimpmoduletypes.h"
 #include "libgimpthumb/gimpthumb-types.h"
 
-#include "base/base-types.h"
 #include "config/config-types.h"
 
 #include "core/core-enums.h"
@@ -78,6 +77,7 @@
 
 typedef struct _GimpObject          GimpObject;
 typedef struct _GimpViewable        GimpViewable;
+typedef struct _GimpFilter          GimpFilter;
 typedef struct _GimpItem            GimpItem;
 
 typedef struct _Gimp                Gimp;
@@ -91,6 +91,7 @@ typedef struct _GimpList              GimpList;
 typedef struct _GimpDocumentList      GimpDocumentList;
 typedef struct _GimpDrawableStack     GimpDrawableStack;
 typedef struct _GimpFilteredContainer GimpFilteredContainer;
+typedef struct _GimpFilterStack       GimpFilterStack;
 typedef struct _GimpItemStack         GimpItemStack;
 typedef struct _GimpTaggedContainer   GimpTaggedContainer;
 
@@ -175,12 +176,12 @@ typedef struct _GimpGuide           GimpGuide;
 typedef struct _GimpHistogram       GimpHistogram;
 typedef struct _GimpIdTable         GimpIdTable;
 typedef struct _GimpImageMap        GimpImageMap;
-typedef struct _GimpImageMapConfig  GimpImageMapConfig;
 typedef struct _GimpImagefile       GimpImagefile;
 typedef struct _GimpInterpreterDB   GimpInterpreterDB;
 typedef struct _GimpParasiteList    GimpParasiteList;
 typedef struct _GimpPdbProgress     GimpPdbProgress;
 typedef struct _GimpProjection      GimpProjection;
+typedef struct _GimpSettings        GimpSettings;
 typedef struct _GimpSubProgress     GimpSubProgress;
 typedef struct _GimpTag             GimpTag;
 typedef struct _GimpTreeHandler     GimpTreeHandler;

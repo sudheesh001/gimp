@@ -43,13 +43,13 @@ struct _GimpImageMapTool
   GeglNode              *operation;
   GObject               *config;
   GObject               *default_config;
+  gchar                 *undo_desc;
 
   GimpImageMap          *image_map;
 
   /* dialog */
   gboolean               overlay;
-  GtkWidget             *dialog;
-  GtkWidget             *main_vbox;
+  GimpToolGui           *gui;
   GtkWidget             *settings_box;
   GtkSizeGroup          *label_group;
   GtkWidget             *active_picker;
@@ -68,7 +68,8 @@ struct _GimpImageMapToolClass
 
   /* virtual functions */
   GeglNode  * (* get_operation)   (GimpImageMapTool  *image_map_tool,
-                                   GObject          **config);
+                                   GObject          **config,
+                                   gchar            **undo_desc);
   void        (* map)             (GimpImageMapTool  *image_map_tool);
   void        (* dialog)          (GimpImageMapTool  *image_map_tool);
   void        (* reset)           (GimpImageMapTool  *image_map_tool);
@@ -91,21 +92,22 @@ struct _GimpImageMapToolClass
 
   void        (* color_picked)    (GimpImageMapTool  *image_map_tool,
                                    gpointer           identifier,
+                                   gdouble            x,
+                                   gdouble            y,
                                    const Babl        *sample_format,
                                    const GimpRGB     *color);
 };
 
 
-GType   gimp_image_map_tool_get_type   (void) G_GNUC_CONST;
+GType   gimp_image_map_tool_get_type      (void) G_GNUC_CONST;
 
-void    gimp_image_map_tool_preview    (GimpImageMapTool *image_map_tool);
+void    gimp_image_map_tool_preview       (GimpImageMapTool *image_map_tool);
 
-/* temp hack for the gegl tool */
-void    gimp_image_map_tool_create_map (GimpImageMapTool *image_map_tool);
+void    gimp_image_map_tool_get_operation (GimpImageMapTool *image_map_tool);
 
-void    gimp_image_map_tool_edit_as    (GimpImageMapTool *image_map_tool,
-                                        const gchar      *new_tool_id,
-                                        GimpConfig       *config);
+void    gimp_image_map_tool_edit_as       (GimpImageMapTool *image_map_tool,
+                                           const gchar      *new_tool_id,
+                                           GimpConfig       *config);
 
 /* accessors for derived classes */
 GtkWidget    * gimp_image_map_tool_dialog_get_vbox        (GimpImageMapTool *tool);
@@ -114,7 +116,7 @@ GtkSizeGroup * gimp_image_map_tool_dialog_get_label_group (GimpImageMapTool *too
 GtkWidget    * gimp_image_map_tool_add_color_picker       (GimpImageMapTool *tool,
                                                            gpointer          identifier,
                                                            const gchar      *stock_id,
-                                                           const gchar      *help_id);
+                                                           const gchar      *tooltip);
 
 
 #endif  /*  __GIMP_IMAGE_MAP_TOOL_H__  */

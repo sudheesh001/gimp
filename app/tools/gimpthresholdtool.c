@@ -54,7 +54,8 @@ static gboolean   gimp_threshold_tool_initialize      (GimpTool          *tool,
                                                        GError           **error);
 
 static GeglNode * gimp_threshold_tool_get_operation   (GimpImageMapTool  *im_tool,
-                                                       GObject          **config);
+                                                       GObject          **config,
+                                                       gchar            **undo_desc);
 static void       gimp_threshold_tool_dialog          (GimpImageMapTool  *im_tool);
 
 static void       gimp_threshold_tool_config_notify   (GObject           *object,
@@ -115,7 +116,7 @@ gimp_threshold_tool_class_init (GimpThresholdToolClass *klass)
 static void
 gimp_threshold_tool_init (GimpThresholdTool *t_tool)
 {
-  t_tool->histogram = gimp_histogram_new ();
+  t_tool->histogram = gimp_histogram_new (TRUE);
 }
 
 static void
@@ -125,7 +126,7 @@ gimp_threshold_tool_finalize (GObject *object)
 
   if (t_tool->histogram)
     {
-      gimp_histogram_unref (t_tool->histogram);
+      g_object_unref (t_tool->histogram);
       t_tool->histogram = NULL;
     }
 
@@ -141,11 +142,6 @@ gimp_threshold_tool_initialize (GimpTool     *tool,
   GimpImage         *image    = gimp_display_get_image (display);
   GimpDrawable      *drawable = gimp_image_get_active_drawable (image);
 
-  if (! drawable)
-    return FALSE;
-
-  gimp_config_reset (GIMP_CONFIG (t_tool->config));
-
   if (! GIMP_TOOL_CLASS (parent_class)->initialize (tool, display, error))
     {
       return FALSE;
@@ -155,35 +151,28 @@ gimp_threshold_tool_initialize (GimpTool     *tool,
   gimp_histogram_view_set_histogram (t_tool->histogram_box->view,
                                      t_tool->histogram);
 
-  gimp_image_map_tool_preview (GIMP_IMAGE_MAP_TOOL (t_tool));
-
   return TRUE;
 }
 
 static GeglNode *
 gimp_threshold_tool_get_operation (GimpImageMapTool  *image_map_tool,
-                                   GObject          **config)
+                                   GObject          **config,
+                                   gchar            **undo_desc)
 {
   GimpThresholdTool *t_tool = GIMP_THRESHOLD_TOOL (image_map_tool);
-  GeglNode          *node;
-
-  node = g_object_new (GEGL_TYPE_NODE,
-                       "operation", "gimp:threshold",
-                       NULL);
 
   t_tool->config = g_object_new (GIMP_TYPE_THRESHOLD_CONFIG, NULL);
-
-  *config = G_OBJECT (t_tool->config);
 
   g_signal_connect_object (t_tool->config, "notify",
                            G_CALLBACK (gimp_threshold_tool_config_notify),
                            G_OBJECT (t_tool), 0);
 
-  gegl_node_set (node,
-                 "config", t_tool->config,
-                 NULL);
+  *config = G_OBJECT (t_tool->config);
 
-  return node;
+  return gegl_node_new_child (NULL,
+                              "operation", "gimp:threshold",
+                              "config",    t_tool->config,
+                              NULL);
 }
 
 
@@ -202,6 +191,7 @@ gimp_threshold_tool_dialog (GimpImageMapTool *image_map_tool)
   GtkWidget           *menu;
   GtkWidget           *box;
   GtkWidget           *button;
+  gint                 n_bins;
 
   main_vbox = gimp_image_map_tool_dialog_get_vbox (image_map_tool);
 
@@ -221,9 +211,11 @@ gimp_threshold_tool_dialog (GimpImageMapTool *image_map_tool)
 
   t_tool->histogram_box = GIMP_HISTOGRAM_BOX (box);
 
+  n_bins = gimp_histogram_n_bins (t_tool->histogram);
+
   gimp_histogram_view_set_range (t_tool->histogram_box->view,
-                                 config->low  * 255.999,
-                                 config->high * 255.999);
+                                 config->low  * (n_bins - 0.0001),
+                                 config->high * (n_bins - 0.0001));
 
   g_signal_connect (t_tool->histogram_box->view, "range-changed",
                     G_CALLBACK (gimp_threshold_tool_histogram_range),
@@ -253,15 +245,16 @@ gimp_threshold_tool_config_notify (GObject           *object,
                                    GimpThresholdTool *t_tool)
 {
   GimpThresholdConfig *config = GIMP_THRESHOLD_CONFIG (object);
+  gint                 n_bins;
 
   if (! t_tool->histogram_box)
     return;
 
-  gimp_histogram_view_set_range (t_tool->histogram_box->view,
-                                 config->low  * 255.999,
-                                 config->high * 255.999);
+  n_bins = gimp_histogram_n_bins (t_tool->histogram);
 
-  gimp_image_map_tool_preview (GIMP_IMAGE_MAP_TOOL (t_tool));
+  gimp_histogram_view_set_range (t_tool->histogram_box->view,
+                                 config->low  * (n_bins - 0.0001),
+                                 config->high * (n_bins - 0.0001));
 }
 
 static void
@@ -270,8 +263,9 @@ gimp_threshold_tool_histogram_range (GimpHistogramView *widget,
                                      gint               end,
                                      GimpThresholdTool *t_tool)
 {
-  gdouble low  = start / 255.0;
-  gdouble high = end   / 255.0;
+  gint    n_bins = gimp_histogram_n_bins (t_tool->histogram);
+  gdouble low    = (gdouble) start / (n_bins - 1);
+  gdouble high   = (gdouble) end   / (n_bins - 1);
 
   if (low  != t_tool->config->low ||
       high != t_tool->config->high)
@@ -288,14 +282,15 @@ gimp_threshold_tool_auto_clicked (GtkWidget         *button,
                                   GimpThresholdTool *t_tool)
 {
   GimpDrawable *drawable = GIMP_IMAGE_MAP_TOOL (t_tool)->drawable;
+  gint          n_bins   = gimp_histogram_n_bins (t_tool->histogram);
   gdouble       low;
 
   low = gimp_histogram_get_threshold (t_tool->histogram,
                                       gimp_drawable_is_rgb (drawable) ?
                                       GIMP_HISTOGRAM_RGB :
                                       GIMP_HISTOGRAM_VALUE,
-                                      0, 255);
+                                      0, n_bins - 1);
 
   gimp_histogram_view_set_range (t_tool->histogram_box->view,
-                                 low, 255.0);
+                                 low, n_bins - 1);
 }

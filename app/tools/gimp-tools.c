@@ -78,11 +78,14 @@
 #include "gimpthresholdtool.h"
 #include "gimprectangleselecttool.h"
 #include "gimprotatetool.h"
+#include "gimpseamlessclonetool.h"
 #include "gimpscaletool.h"
 #include "gimpsheartool.h"
 #include "gimpsmudgetool.h"
 #include "gimptexttool.h"
+#include "gimpunifiedtransformtool.h"
 #include "gimpvectortool.h"
+#include "gimpwarptool.h"
 
 #include "gimp-intl.h"
 
@@ -147,15 +150,18 @@ gimp_tools_init (Gimp *gimp)
     gimp_blend_tool_register,
     gimp_bucket_fill_tool_register,
     gimp_text_tool_register,
+    gimp_seamless_clone_tool_register,
 
     /*  transform tools  */
 
+    gimp_warp_tool_register,
     gimp_cage_tool_register,
     gimp_flip_tool_register,
     gimp_perspective_tool_register,
     gimp_shear_tool_register,
     gimp_scale_tool_register,
     gimp_rotate_tool_register,
+    gimp_unified_transform_tool_register,
     gimp_crop_tool_register,
     gimp_align_tool_register,
     gimp_move_tool_register,
@@ -172,8 +178,8 @@ gimp_tools_init (Gimp *gimp)
 
     /*  selection tools */
 
-#if 0
     gimp_foreground_select_tool_register,
+#if 0
     gimp_iscissors_tool_register,
 #endif
     gimp_by_color_select_tool_register,

@@ -26,13 +26,15 @@
 
 #include "config/gimpcoreconfig.h"
 
+#include "gegl/gimp-babl.h"
+
 #include "core/core-enums.h"
 #include "core/gimp.h"
 #include "core/gimpchannel.h"
 #include "core/gimpcontext.h"
 #include "core/gimpimage.h"
-#include "core/gimpimage-convert.h"
 #include "core/gimpimage-convert-precision.h"
+#include "core/gimpimage-convert-type.h"
 #include "core/gimpimage-crop.h"
 #include "core/gimpimage-duplicate.h"
 #include "core/gimpimage-flip.h"
@@ -41,6 +43,8 @@
 #include "core/gimpimage-rotate.h"
 #include "core/gimpimage-scale.h"
 #include "core/gimpimage-undo.h"
+#include "core/gimppickable.h"
+#include "core/gimppickable-auto-shrink.h"
 #include "core/gimpprogress.h"
 
 #include "widgets/gimpdialogfactory.h"
@@ -50,7 +54,8 @@
 #include "display/gimpdisplay.h"
 #include "display/gimpdisplayshell.h"
 
-#include "dialogs/convert-dialog.h"
+#include "dialogs/convert-precision-dialog.h"
+#include "dialogs/convert-type-dialog.h"
 #include "dialogs/grid-dialog.h"
 #include "dialogs/image-merge-layers-dialog.h"
 #include "dialogs/image-new-dialog.h"
@@ -63,6 +68,10 @@
 #include "image-commands.h"
 
 #include "gimp-intl.h"
+
+
+#define IMAGE_CONVERT_PRECISION_DIALOG_KEY "image-convert-precision-dialog"
+#define IMAGE_CONVERT_TYPE_DIALOG_KEY      "image-convert-type-dialog"
 
 
 typedef struct
@@ -82,6 +91,7 @@ static void   image_resize_callback        (GtkWidget              *dialog,
                                             gint                    offset_x,
                                             gint                    offset_y,
                                             GimpItemSet             layer_set,
+                                            gboolean                resize_text_layers,
                                             gpointer                data);
 static void   image_resize_options_free    (ImageResizeOptions     *options);
 
@@ -144,9 +154,9 @@ image_new_cmd_callback (GtkAction *action,
 }
 
 static void
-image_convert_dialog_unset (GtkWidget *widget)
+image_convert_type_dialog_unset (GtkWidget *widget)
 {
-  g_object_set_data (G_OBJECT (widget), "image-convert-dialog", NULL);
+  g_object_set_data (G_OBJECT (widget), IMAGE_CONVERT_TYPE_DIALOG_KEY, NULL);
 }
 
 void
@@ -172,8 +182,9 @@ image_convert_base_type_cmd_callback (GtkAction *action,
     {
     case GIMP_RGB:
     case GIMP_GRAY:
-      if (! gimp_image_convert (image, value, 0, 0, FALSE, FALSE, 0, NULL,
-                                NULL, &error))
+      if (! gimp_image_convert_type (image, value,
+                                     0, 0, FALSE, FALSE, FALSE, 0, NULL,
+                                     NULL, &error))
         {
           gimp_message_literal (image->gimp,
 				G_OBJECT (widget), GIMP_MESSAGE_WARNING,
@@ -187,20 +198,21 @@ image_convert_base_type_cmd_callback (GtkAction *action,
       {
         GtkWidget *dialog;
 
-        dialog = g_object_get_data (G_OBJECT (widget), "image-convert-dialog");
+        dialog = g_object_get_data (G_OBJECT (widget),
+                                    IMAGE_CONVERT_TYPE_DIALOG_KEY);
 
         if (! dialog)
           {
-            dialog = convert_dialog_new (image,
-                                         action_data_get_context (data),
-                                         widget,
-                                         GIMP_PROGRESS (display));
+            dialog = convert_type_dialog_new (image,
+                                              action_data_get_context (data),
+                                              widget,
+                                              GIMP_PROGRESS (display));
 
             g_object_set_data (G_OBJECT (widget),
-                               "image-convert-dialog", dialog);
+                               IMAGE_CONVERT_TYPE_DIALOG_KEY, dialog);
 
             g_signal_connect_object (dialog, "destroy",
-                                     G_CALLBACK (image_convert_dialog_unset),
+                                     G_CALLBACK (image_convert_type_dialog_unset),
                                      widget, G_CONNECT_SWAPPED);
           }
 
@@ -212,15 +224,23 @@ image_convert_base_type_cmd_callback (GtkAction *action,
   gimp_image_flush (image);
 }
 
+static void
+image_convert_precision_dialog_unset (GtkWidget *widget)
+{
+  g_object_set_data (G_OBJECT (widget), IMAGE_CONVERT_PRECISION_DIALOG_KEY, NULL);
+}
+
 void
 image_convert_precision_cmd_callback (GtkAction *action,
                                       GtkAction *current,
                                       gpointer   data)
 {
   GimpImage     *image;
+  GtkWidget     *widget;
   GimpDisplay   *display;
   GimpPrecision  value;
   return_if_no_image (image, data);
+  return_if_no_widget (widget, data);
   return_if_no_display (display, data);
 
   value = gtk_radio_action_get_current_value (GTK_RADIO_ACTION (action));
@@ -228,7 +248,38 @@ image_convert_precision_cmd_callback (GtkAction *action,
   if (value == gimp_image_get_precision (image))
     return;
 
-  gimp_image_convert_precision (image, value, GIMP_PROGRESS (display));
+  if ((value < gimp_image_get_precision (image)) ||
+      (gimp_babl_component_type (value) == gimp_image_get_component_type (image)))
+    {
+      GtkWidget *dialog;
+
+      dialog = g_object_get_data (G_OBJECT (widget),
+                                  IMAGE_CONVERT_PRECISION_DIALOG_KEY);
+
+      if (! dialog)
+        {
+          dialog = convert_precision_dialog_new (image,
+                                                 action_data_get_context (data),
+                                                 widget,
+                                                 value,
+                                                 GIMP_PROGRESS (display));
+
+          g_object_set_data (G_OBJECT (widget),
+                             IMAGE_CONVERT_PRECISION_DIALOG_KEY, dialog);
+
+          g_signal_connect_object (dialog, "destroy",
+                                   G_CALLBACK (image_convert_precision_dialog_unset),
+                                   widget, G_CONNECT_SWAPPED);
+        }
+
+      gtk_window_present (GTK_WINDOW (dialog));
+    }
+  else
+    {
+      gimp_image_convert_precision (image, value, 0, 0, 0,
+                                    GIMP_PROGRESS (display));
+    }
+
   gimp_image_flush (image);
 }
 
@@ -433,8 +484,8 @@ image_rotate_cmd_callback (GtkAction *action,
 }
 
 void
-image_crop_cmd_callback (GtkAction *action,
-                         gpointer   data)
+image_crop_to_selection_cmd_callback (GtkAction *action,
+                                      gpointer   data)
 {
   GimpImage *image;
   GtkWidget *widget;
@@ -452,7 +503,34 @@ image_crop_cmd_callback (GtkAction *action,
     }
 
   gimp_image_crop (image, action_data_get_context (data),
-                   x1, y1, x2, y2, FALSE, TRUE);
+                   x1, y1, x2, y2, TRUE);
+  gimp_image_flush (image);
+}
+
+void
+image_crop_to_content_cmd_callback (GtkAction *action,
+                                    gpointer   data)
+{
+  GimpImage *image;
+  GtkWidget *widget;
+  gint       x1, y1, x2, y2;
+  return_if_no_image (image, data);
+  return_if_no_widget (widget, data);
+
+  if (! gimp_pickable_auto_shrink (GIMP_PICKABLE (gimp_image_get_projection (image)),
+                                   0, 0,
+                                   gimp_image_get_width  (image),
+                                   gimp_image_get_height (image),
+                                   &x1, &y1, &x2, &y2))
+    {
+      gimp_message_literal (image->gimp,
+			    G_OBJECT (widget), GIMP_MESSAGE_WARNING,
+			    _("Cannot crop because the image has no content."));
+      return;
+    }
+
+  gimp_image_crop (image, action_data_get_context (data),
+                   x1, y1, x2, y2, TRUE);
   gimp_image_flush (image);
 }
 
@@ -508,9 +586,20 @@ image_flatten_image_cmd_callback (GtkAction *action,
                                   gpointer   data)
 {
   GimpImage *image;
+  GtkWidget *widget;
+  GError    *error = NULL;
   return_if_no_image (image, data);
+  return_if_no_widget (widget, data);
 
-  gimp_image_flatten (image, action_data_get_context (data));
+  if (! gimp_image_flatten (image, action_data_get_context (data), &error))
+    {
+      gimp_message_literal (image->gimp,
+                            G_OBJECT (widget), GIMP_MESSAGE_WARNING,
+                            error->message);
+      g_clear_error (&error);
+      return;
+    }
+
   gimp_image_flush (image);
 }
 
@@ -581,6 +670,7 @@ image_resize_callback (GtkWidget    *dialog,
                        gint          offset_x,
                        gint          offset_y,
                        GimpItemSet   layer_set,
+                       gboolean      resize_text_layers,
                        gpointer      data)
 {
   ImageResizeOptions *options = data;
@@ -607,6 +697,7 @@ image_resize_callback (GtkWidget    *dialog,
                                      context,
                                      width, height, offset_x, offset_y,
                                      layer_set,
+                                     resize_text_layers,
                                      progress);
 
       if (progress)

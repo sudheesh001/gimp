@@ -269,6 +269,15 @@
         <separator />
         <menuitem action="view-zoom-other" />
       </menu>
+      <menu action="view-rotate-menu" name="Rotate">
+        <menuitem action="view-rotate-reset" />
+        <separator />
+        <menuitem action="view-rotate-90" />
+        <menuitem action="view-rotate-270" />
+        <menuitem action="view-rotate-180" />
+        <separator />
+        <menuitem action="view-rotate-other" />
+      </menu>
       <separator />
       <menuitem action="view-shrink-wrap" />
       <menuitem action="view-fullscreen" />
@@ -319,11 +328,16 @@
         <separator />
       </menu>
       <menu action="image-precision-menu" name="Precision">
-        <menuitem action="image-convert-u8" />
-        <menuitem action="image-convert-u16" />
-        <menuitem action="image-convert-u32" />
-        <menuitem action="image-convert-half" />
-        <menuitem action="image-convert-float" />
+        <menuitem action="image-convert-u8-linear" />
+        <menuitem action="image-convert-u8-gamma" />
+        <menuitem action="image-convert-u16-linear" />
+        <menuitem action="image-convert-u16-gamma" />
+        <menuitem action="image-convert-u32-linear" />
+        <menuitem action="image-convert-u32-gamma" />
+        <menuitem action="image-convert-half-linear" />
+        <menuitem action="image-convert-half-gamma" />
+        <menuitem action="image-convert-float-linear" />
+        <menuitem action="image-convert-float-gamma" />
         <separator />
       </menu>
       <menu action="image-transform-menu" name="Transform">
@@ -351,7 +365,8 @@
       </placeholder>
       <separator />
       <placeholder name="Crop">
-        <menuitem action="image-crop" />
+        <menuitem action="image-crop-to-selection" />
+        <menuitem action="image-crop-to-content" />
       </placeholder>
       <separator />
       <placeholder name="Structure">
@@ -490,7 +505,8 @@
         <menuitem action="layers-scale" />
       </placeholder>
       <placeholder name="Crop">
-        <menuitem action="layers-crop" />
+        <menuitem action="layers-crop-to-selection" />
+        <menuitem action="layers-crop-to-content" />
       </placeholder>
       <separator />
     </menu>
@@ -515,10 +531,18 @@
         <menuitem action="drawable-equalize" />
         <menuitem action="drawable-levels-stretch" />
       </menu>
-      <menu action="colors-components-menu" name="Components" />
+      <menu action="colors-components-menu" name="Components">
+	<menuitem action="filters-channel-mixer" />
+      </menu>
+      <menu action="colors-desaturate-menu" name="Desaturate">
+	<menuitem action="filters-mono-mixer" />
+	<menuitem action="filters-c2g" />
+        <separator />
+      </menu>
       <menu action="colors-map-menu" name="Map">
         <placeholder name="Colormap" />
         <separator />
+	<menuitem action="filters-alien-map" />
       </menu>
       <menu action="colors-info-menu" name="Info">
         <menuitem action="dialogs-histogram" />
@@ -527,6 +551,7 @@
       <menuitem action="filters-color-to-alpha" />
       <menuitem action="filters-color-reduction" />
       <menuitem action="filters-color-temperature" />
+      <menuitem action="filters-exposure" />
       <placeholder name="Modify" />
     </menu>
 
@@ -567,8 +592,10 @@
         <menuitem action="tools-scale" />
         <menuitem action="tools-shear" />
         <menuitem action="tools-perspective" />
+        <menuitem action="tools-unified-transform" />
         <menuitem action="tools-flip" />
         <menuitem action="tools-cage" />
+        <menuitem action="tools-warp" />
       </menu>
       <menu action="tools-color-menu" name="Color Tools">
         <menuitem action="tools-color-balance" />
@@ -603,38 +630,76 @@
       <separator />
       <menu action="plug-in-blur-menu" name="Blur">
       	<menuitem action="filters-gaussian-blur" />
+      	<menuitem action="filters-dot" />
       	<menuitem action="filters-pixelize" />
+	<placeholder name="Motion">
+	  <menuitem action="filters-motion-blur-circular" />
+	  <menuitem action="filters-motion-blur-linear" />
+	  <menuitem action="filters-motion-blur-zoom" />
+	</placeholder>
       </menu>
       <menu action="plug-in-enhance-menu" name="Enhance">
+        <menuitem action="filters-antialias" />
+        <menuitem action="filters-deinterlace" />
+        <menuitem action="filters-red-eye-removal" />
         <menuitem action="filters-unsharp-mask" />
       </menu>
       <menu action="plug-in-distorts-menu" name="Distorts">
+      	<menuitem action="filters-emboss" />
+        <menuitem action="filters-lens-distortion" />
       	<menuitem action="filters-polar-coordinates" />
         <menuitem action="filters-ripple" />
-        <menuitem action="filters-lens-distortion" />
+        <menuitem action="filters-shift" />
+        <menuitem action="filters-waves" />
+        <menuitem action="filters-whirl-pinch" />
       </menu>
       <menu action="plug-in-light-shadow-menu" name="Light and Shadow">
         <placeholder name="Light" />
         <separator />
-        <placeholder name="Shadow" />
+        <placeholder name="Shadow">
+	  <menuitem action="filters-dropshadow" />
+	  <menuitem action="filters-vignette" />
+	</placeholder>
         <separator />
         <placeholder name="Glass" />
       </menu>
-      <menu action="plug-in-noise-menu" name="Noise" />
+      <menu action="plug-in-noise-menu" name="Noise">
+        <menuitem action="filters-noise-cie-lch" />
+        <menuitem action="filters-noise-hsv" />
+        <menuitem action="filters-noise-hurl" />
+        <menuitem action="filters-noise-pick" />
+        <menuitem action="filters-noise-rgb" />
+        <menuitem action="filters-noise-slur" />
+        <menuitem action="filters-noise-spread" />
+      </menu>
       <menu action="plug-in-edge-detect-menu" name="Edge-Detect">
         <menuitem action="filters-difference-of-gaussians" />
-        <menuitem action="filters-laplace" />
-        <menuitem action="filters-sobel" />
+        <menuitem action="filters-edge-laplace" />
+        <menuitem action="filters-edge-sobel" />
       </menu>
       <menu action="plug-in-generic-menu" name="Generic" />
       <menu action="plug-in-combine-menu" name="Combine" />
-      <menu action="plug-in-artistic-menu" name="Artistic" />
+      <menu action="plug-in-artistic-menu" name="Artistic">
+	<menuitem action="filters-cartoon" />
+	<menuitem action="filters-cubism" />
+	<menuitem action="filters-photocopy" />
+	<menuitem action="filters-softglow" />
+      </menu>
       <menu action="plug-in-decor-menu" name="Decor" />
-      <menu action="plug-in-map-menu" name="Map" />
+      <menu action="plug-in-map-menu" name="Map">
+        <menuitem action="filters-bump-map" />
+        <menuitem action="filters-fractal-trace" />
+        <menuitem action="filters-tile-seamless" />
+      </menu>
       <menu action="plug-in-render-menu" name="Render">
-        <menu action="plug-in-render-clouds-menu" name="Clouds" />
+        <menu action="plug-in-render-clouds-menu" name="Clouds">
+	  <menuitem action="filters-plasma" />
+	</menu>
         <menu action="plug-in-render-nature-menu" name="Nature" />
-        <menu action="plug-in-render-pattern-menu" name="Pattern" />
+        <menu action="plug-in-render-pattern-menu" name="Pattern">
+	  <menuitem action="filters-checkerboard" />
+	  <menuitem action="filters-grid" />
+	</menu>
         <separator />
       </menu>
       <menu action="plug-in-web-menu" name="Web">

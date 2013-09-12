@@ -47,10 +47,11 @@ EXTRA_DIST = \
 	TODO.txt		\
 	new-resource-ids.txt
 
-INCLUDES = \
+AM_CPPFLAGS = \
 	-I$(top_srcdir)		\
 	$(GTK_CFLAGS)		\
-	$(GEGL_CFLAGS) \
+	$(EXIF_CFLAGS)		\
+	$(GEGL_CFLAGS)		\
 	-I$(includedir)
 
 LDADD = \

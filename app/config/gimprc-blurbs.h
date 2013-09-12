@@ -93,16 +93,16 @@ N_("When enabled, this will ensure that each pixel of an image gets " \
 N_("This is the distance in pixels where Guide and Grid snapping " \
    "activates.")
 
-#define DEFAULT_SNAP_TO_GUIDES_BLURB \
+#define SNAP_TO_GUIDES_BLURB \
 "Snap to guides by default in new image windows."
 
-#define DEFAULT_SNAP_TO_GRID_BLURB \
+#define SNAP_TO_GRID_BLURB \
 "Snap to the grid by default in new image windows."
 
-#define DEFAULT_SNAP_TO_CANVAS_BLURB \
-"Snap to the canvas edge by default in new image windows."
+#define SNAP_TO_CANVAS_BLURB \
+"Snap to the canvas edges by default in new image windows."
 
-#define DEFAULT_SNAP_TO_PATH_BLURB \
+#define SNAP_TO_PATH_BLURB \
 "Snap to the active path by default in new image windows."
 
 #define DEFAULT_THRESHOLD_BLURB \
@@ -312,7 +312,7 @@ N_("Save the tool options when GIMP exits.")
 "This path will be searched for scripts when the Script-Fu plug-in is run."
 
 #define SHOW_BRUSH_OUTLINE_BLURB \
-N_("When enabled, all paint tools will show a preview of the current " \
+N_("When enabled, all brush-based paint tools will show a preview of the current " \
    "brush's outline.")
 
 #define SHOW_HELP_BUTTON_BLURB \
@@ -322,7 +322,7 @@ N_("When enabled, dialogs will show a help button that gives access to " \
 
 #define SHOW_PAINT_TOOL_CURSOR_BLURB \
 N_("When enabled, the mouse pointer will be shown over the image while " \
-    "using a paint tool.")
+    "using a brush-based paint tool.")
 
 #define SHOW_MENUBAR_BLURB \
 N_("When enabled, the menubar is visible by default. This can also be " \
@@ -453,10 +453,13 @@ N_("Sets an upper limit to the memory that is used per image to keep " \
 #define UNDO_PREVIEW_SIZE_BLURB \
 N_("Sets the size of the previews in the Undo History.")
 
-#define USE_HELP_BLURB  \
+#define USE_HELP_BLURB \
 N_("When enabled, pressing F1 will open the help browser.")
 
-#define USER_MANUAL_ONLINE_BLURB  \
+#define USE_OPENCL_BLURB \
+N_("When enabled, uses OpenCL for some operations.")
+
+#define USER_MANUAL_ONLINE_BLURB \
 "When enabled, the online user manual will be used by the help system. " \
 "Otherwise the locally installed copy is used."
 

@@ -32,7 +32,7 @@
 
 #define RANDOM_TABLE_SIZE 4096
 
-static void     gimp_operation_dissolve_mode_prepare (GeglOperation       *operation);
+
 static gboolean gimp_operation_dissolve_mode_process (GeglOperation       *operation,
                                                       void                *in_buf,
                                                       void                *aux_buf,
@@ -66,7 +66,6 @@ gimp_operation_dissolve_mode_class_init (GimpOperationDissolveModeClass *klass)
                                  "categories",  "compositors",
                                  NULL);
 
-  operation_class->prepare      = gimp_operation_dissolve_mode_prepare;
   point_composer_class->process = gimp_operation_dissolve_mode_process;
 
   /* generate a table of random seeds */
@@ -82,17 +81,6 @@ gimp_operation_dissolve_mode_init (GimpOperationDissolveMode *self)
 {
 }
 
-static void
-gimp_operation_dissolve_mode_prepare (GeglOperation *operation)
-{
-  const Babl *format = babl_format ("R'G'B'A float");
-
-  gegl_operation_set_format (operation, "input",  format);
-  gegl_operation_set_format (operation, "aux",    format);
-  gegl_operation_set_format (operation, "aux2",   babl_format ("Y float"));
-  gegl_operation_set_format (operation, "output", format);
-}
-
 static gboolean
 gimp_operation_dissolve_mode_process (GeglOperation       *operation,
                                       void                *in_buf,
@@ -103,13 +91,23 @@ gimp_operation_dissolve_mode_process (GeglOperation       *operation,
                                       const GeglRectangle *result,
                                       gint                 level)
 {
-  gdouble         opacity  = GIMP_OPERATION_POINT_LAYER_MODE (operation)->opacity;
-  gfloat         *in       = in_buf;
-  gfloat         *out      = out_buf;
-  gfloat         *aux      = aux_buf;
-  gfloat         *mask     = aux2_buf;
-  const gboolean  has_mask = mask != NULL;
-  gint            x, y;
+  gfloat opacity = GIMP_OPERATION_POINT_LAYER_MODE (operation)->opacity;
+
+  return gimp_operation_dissolve_mode_process_pixels (in_buf, aux_buf, aux2_buf, out_buf, opacity, samples, result, level);
+}
+
+gboolean
+gimp_operation_dissolve_mode_process_pixels (gfloat              *in,
+                                             gfloat              *aux,
+                                             gfloat              *mask,
+                                             gfloat              *out,
+                                             gfloat               opacity,
+                                             glong                samples,
+                                             const GeglRectangle *result,
+                                             gint                 level)
+{
+  const gboolean has_mask = mask != NULL;
+  gint           x, y;
 
   for (y = result->y; y < result->y + result->height; y++)
     {

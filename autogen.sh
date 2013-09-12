@@ -109,7 +109,7 @@ if test x$LIBTOOLIZE != x; then
     check_version $VER $LIBTOOL_REQUIRED_VERSION
 fi
 
-# check if gtk-doc is explicitely disabled
+# check if gtk-doc is explicitly disabled
 for ag_option in $AUTOGEN_CONFIGURE_ARGS $@
 do
   case $ag_option in
@@ -157,6 +157,12 @@ echo -n "checking for automake >= $AUTOMAKE_REQUIRED_VERSION ... "
 if ($AUTOMAKE --version) < /dev/null > /dev/null 2>&1; then
    AUTOMAKE=$AUTOMAKE
    ACLOCAL=$ACLOCAL
+elif (automake-1.14 --version) < /dev/null > /dev/null 2>&1; then
+   AUTOMAKE=automake-1.14
+   ACLOCAL=aclocal-1.14
+elif (automake-1.13 --version) < /dev/null > /dev/null 2>&1; then
+   AUTOMAKE=automake-1.13
+   ACLOCAL=aclocal-1.13
 elif (automake-1.12 --version) < /dev/null > /dev/null 2>&1; then
    AUTOMAKE=automake-1.12
    ACLOCAL=aclocal-1.12

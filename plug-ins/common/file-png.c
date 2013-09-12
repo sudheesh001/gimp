@@ -308,7 +308,7 @@ query (void)
                           "This plug-in saves Portable Network Graphics "
                           "(PNG) files. "
                           "This procedure adds 2 extra parameters to "
-                          "file-png-save that allows to control whether "
+                          "file-png-save that control whether "
                           "image comments are saved and whether transparent "
                           "pixels are saved or nullified.",
                           "Michael Sweet <mike@easysw.com>, "
@@ -407,11 +407,10 @@ run (const gchar      *name,
   GError           *error  = NULL;
 
   INIT_I18N ();
+  gegl_init (NULL, NULL);
 
   *nreturn_vals = 1;
   *return_vals = values;
-
-  gegl_init (NULL, NULL);
 
   values[0].type          = GIMP_PDB_STATUS;
   values[0].data.d_status = GIMP_PDB_EXECUTION_ERROR;
@@ -694,9 +693,6 @@ load_image (const gchar  *filename,
   int i,                        /* Looping var */
     trns,                       /* Transparency present */
     bpp,                        /* Bytes per pixel */
-    image_type,                 /* Type of image */
-    image_precision,            /* Precision of image */
-    layer_type,                 /* Type of drawable/layer */
     width,                      /* image width */
     height,                     /* image height */
     empty,                      /* Number of fully transparent indices */
@@ -706,6 +702,9 @@ load_image (const gchar  *filename,
     begin,                      /* Beginning tile row */
     end,                        /* Ending tile row */
     num;                        /* Number of rows to load */
+  GimpImageBaseType image_type; /* Type of image */
+  GimpPrecision image_precision;/* Precision of image */
+  GimpImageType layer_type;     /* Type of drawable/layer */
   FILE *fp;                     /* File pointer */
   volatile gint32 image = -1;   /* Image -- preserved against setjmp() */
   gint32 layer;                 /* Layer */
@@ -775,9 +774,9 @@ load_image (const gchar  *filename,
    */
 
   if (png_get_bit_depth (pp, info) == 16)
-    image_precision = GIMP_PRECISION_U16;
+    image_precision = GIMP_PRECISION_U16_GAMMA;
   else
-    image_precision = GIMP_PRECISION_U8;
+    image_precision = GIMP_PRECISION_U8_GAMMA;
 
   if (G_BYTE_ORDER == G_LITTLE_ENDIAN)
     png_set_swap (pp);
@@ -840,7 +839,7 @@ load_image (const gchar  *filename,
     case PNG_COLOR_TYPE_RGB:           /* RGB */
       image_type = GIMP_RGB;
       layer_type = GIMP_RGB_IMAGE;
-      if (image_precision == GIMP_PRECISION_U8)
+      if (image_precision == GIMP_PRECISION_U8_GAMMA)
         file_format = babl_format ("R'G'B' u8");
       else
         file_format = babl_format ("R'G'B' u16");
@@ -849,7 +848,7 @@ load_image (const gchar  *filename,
     case PNG_COLOR_TYPE_RGB_ALPHA:     /* RGBA */
       image_type = GIMP_RGB;
       layer_type = GIMP_RGBA_IMAGE;
-      if (image_precision == GIMP_PRECISION_U8)
+      if (image_precision == GIMP_PRECISION_U8_GAMMA)
         file_format = babl_format ("R'G'B'A u8");
       else
         file_format = babl_format ("R'G'B'A u16");
@@ -858,7 +857,7 @@ load_image (const gchar  *filename,
     case PNG_COLOR_TYPE_GRAY:          /* Grayscale */
       image_type = GIMP_GRAY;
       layer_type = GIMP_GRAY_IMAGE;
-      if (image_precision == GIMP_PRECISION_U8)
+      if (image_precision == GIMP_PRECISION_U8_GAMMA)
         file_format = babl_format ("Y' u8");
       else
         file_format = babl_format ("Y' u16");
@@ -867,7 +866,7 @@ load_image (const gchar  *filename,
     case PNG_COLOR_TYPE_GRAY_ALPHA:    /* Grayscale + alpha */
       image_type = GIMP_GRAY;
       layer_type = GIMP_GRAYA_IMAGE;
-      if (image_precision == GIMP_PRECISION_U8)
+      if (image_precision == GIMP_PRECISION_U8_GAMMA)
         file_format = babl_format ("Y'A u8");
       else
         file_format = babl_format ("Y'A u16");
@@ -1134,13 +1133,14 @@ load_image (const gchar  *filename,
 
 #if defined(PNG_iCCP_SUPPORTED)
   /*
-   * Get the iCCP (colour profile) chunk, if any, and attach it as
+   * Get the iCCP (color profile) chunk, if any, and attach it as
    * a parasite
    */
 
   {
     png_uint_32 proflen;
-    png_charp   profname, profile;
+    png_charp   profname;
+    png_bytep   profile;
     int         profcomp;
 
     if (png_get_iCCP (pp, info, &profname, &profcomp, &profile, &proflen))
@@ -1210,8 +1210,8 @@ load_image (const gchar  *filename,
 
           while (iter->length--)
             {
-              data[i * 2 + 1] = alpha[data[i * 2]];
-              data[i * 2] -= empty;
+              data[1] = alpha[data[0]];
+              data[0] -= empty;
 
               data += n_components;
             }
@@ -1330,7 +1330,7 @@ save_image (const gchar  *filename,
 
   png_textp  text = NULL;
 
-  if (gimp_image_get_precision (image_ID) == GIMP_PRECISION_U8)
+  if (gimp_image_get_precision (image_ID) == GIMP_PRECISION_U8_GAMMA)
     bit_depth = 8;
   else
     bit_depth = 16;
@@ -1546,9 +1546,11 @@ save_image (const gchar  *filename,
                                     gimp_parasite_data_size (parasite),
                                     "UTF-8", "ISO-8859-1", NULL, NULL, NULL);
 
-        png_set_iCCP (pp, info,
-                      profile_name ? profile_name : "ICC profile", 0,
-                      (gchar *) gimp_parasite_data (profile_parasite),
+        png_set_iCCP (pp,
+                      info,
+                      profile_name ? profile_name : "ICC profile",
+                      0,
+                      (guchar *) gimp_parasite_data (profile_parasite),
                       gimp_parasite_data_size (profile_parasite));
 
         g_free (profile_name);
@@ -1556,12 +1558,16 @@ save_image (const gchar  *filename,
   }
 #endif
 
+#ifdef PNG_zTXt_SUPPORTED
+/* Small texts are not worth compressing and will be even bigger if compressed.
+   Empirical length limit of a text being worth compressing. */
+#define COMPRESSION_WORTHY_LENGTH 200
+#endif
+
   if (pngvals.comment)
     {
       GimpParasite *parasite;
-#ifndef PNG_iTXt_SUPPORTED
       gsize text_length = 0;
-#endif /* PNG_iTXt_SUPPORTED */
 
       parasite = gimp_image_get_parasite (orig_image_ID, "gimp-comment");
       if (parasite)
@@ -1571,33 +1577,82 @@ save_image (const gchar  *filename,
 
           gimp_parasite_free (parasite);
 
-          text = g_new0 (png_text, 1);
-          text->key         = "Comment";
+          if (comment && strlen (comment) > 0)
+            {
+              text = g_new0 (png_text, 1);
+
+              text[0].key = "Comment";
 
 #ifdef PNG_iTXt_SUPPORTED
 
-          text->compression = PNG_ITXT_COMPRESSION_NONE;
-          text->text        = comment;
-          text->itxt_length = strlen (comment);
+              text[0].text = g_convert (comment, -1,
+                                        "ISO-8859-1",
+                                        "UTF-8",
+                                        NULL,
+                                        &text_length,
+                                        NULL);
 
+              if (text[0].text == NULL || strlen (text[0].text) == 0)
+                {
+                  /* We can't convert to ISO-8859-1 without loss.
+                     Save the comment as iTXt (UTF-8). */
+                  g_free (text[0].text);
+
+                  text[0].text        = g_strdup (comment);
+                  text[0].itxt_length = strlen (text[0].text);
+
+#ifdef PNG_zTXt_SUPPORTED
+                  text[0].compression = strlen (text[0].text) > COMPRESSION_WORTHY_LENGTH ?
+                                        PNG_ITXT_COMPRESSION_zTXt : PNG_ITXT_COMPRESSION_NONE;
 #else
-
-          text->compression = PNG_TEXT_COMPRESSION_NONE;
-          text->text        = g_convert (comment, -1,
-                                         "ISO-8859-1", "UTF-8",
-                                         NULL, &text_length,
-                                         NULL);
-          text->text_length = text_length;
-
+                  text[0].compression = PNG_ITXT_COMPRESSION_NONE;
+#endif /* PNG_zTXt_SUPPORTED */
+                }
+              else
+                  /* The comment is ISO-8859-1 compatible, so we use tEXt
+                     even if there is iTXt support for compatibility to more
+                     png reading programs. */
+#endif /* PNG_iTXt_SUPPORTED */
+                {
+#ifndef PNG_iTXt_SUPPORTED
+                  /* No iTXt support, so we are forced to use tEXt (ISO-8859-1).
+                     A broken comment is better than no comment at all, so the
+                     conversion does not fail on unknown character.
+                     They are simply ignored. */
+                  text[0].text = g_convert_with_fallback (comment, -1,
+                                                          "ISO-8859-1",
+                                                          "UTF-8",
+                                                          "",
+                                                          NULL,
+                                                          &text_length,
+                                                          NULL);
 #endif
 
-          if (!text->text)
-            {
-              g_free (text);
-              text = NULL;
+#ifdef PNG_zTXt_SUPPORTED
+                  text[0].compression = strlen (text[0].text) > COMPRESSION_WORTHY_LENGTH ?
+                                        PNG_TEXT_COMPRESSION_zTXt : PNG_TEXT_COMPRESSION_NONE;
+#else
+                  text[0].compression = PNG_TEXT_COMPRESSION_NONE;
+#endif /* PNG_zTXt_SUPPORTED */
+
+                  text[0].text_length = text_length;
+                 }
+
+              if (! text[0].text || strlen (text[0].text) == 0)
+                {
+                  g_free (text[0].text);
+                  g_free (text);
+                  text = NULL;
+                }
+
+              g_free (comment);
             }
         }
     }
+
+#ifdef PNG_zTXt_SUPPORTED
+#undef COMPRESSION_WORTHY_LENGTH
+#endif
 
   if (text)
     png_set_text (pp, info, text, 1);
@@ -1742,7 +1797,7 @@ save_image (const gchar  *filename,
 
   if (text)
     {
-      g_free (text->text);
+      g_free (text[0].text);
       g_free (text);
     }
 
@@ -1869,7 +1924,9 @@ respin_cmap (png_structp   pp,
    */
   if (colors == 0)
     {
-      before = g_new0 (guchar, 3);
+      before = g_newa (guchar, 3);
+      memset (before, 0, sizeof (guchar) * 3);
+
       colors = 1;
     }
 

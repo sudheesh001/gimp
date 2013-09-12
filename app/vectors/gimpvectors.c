@@ -106,7 +106,6 @@ static void       gimp_vectors_transform     (GimpItem          *item,
                                               const GimpMatrix3 *matrix,
                                               GimpTransformDirection direction,
                                               GimpInterpolationType interp_type,
-                                              gint               recursion_level,
                                               GimpTransformResize   clip_result,
                                               GimpProgress      *progress);
 static gboolean   gimp_vectors_stroke        (GimpItem          *item,
@@ -511,7 +510,6 @@ gimp_vectors_transform (GimpItem               *item,
                         const GimpMatrix3      *matrix,
                         GimpTransformDirection  direction,
                         GimpInterpolationType   interpolation_type,
-                        gint                    recursion_level,
                         GimpTransformResize     clip_result,
                         GimpProgress           *progress)
 {
@@ -906,9 +904,7 @@ gimp_vectors_real_stroke_get_length (const GimpVectors *vectors,
   g_return_val_if_fail (GIMP_IS_VECTORS (vectors), 0.0);
   g_return_val_if_fail (GIMP_IS_STROKE (stroke), 0.0);
 
-  return (gimp_stroke_get_length (stroke, vectors->precision));
-
-  return 0.0;
+  return gimp_stroke_get_length (stroke, vectors->precision);
 }
 
 

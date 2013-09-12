@@ -259,6 +259,7 @@ gimp_text_tool_init (GimpTextTool *text_tool)
   gimp_text_tool_editor_init (text_tool);
 
   gimp_tool_control_set_scroll_lock          (tool->control, TRUE);
+  gimp_tool_control_set_handle_empty_image   (tool->control, TRUE);
   gimp_tool_control_set_wants_click          (tool->control, TRUE);
   gimp_tool_control_set_wants_double_click   (tool->control, TRUE);
   gimp_tool_control_set_wants_triple_click   (tool->control, TRUE);
@@ -277,8 +278,7 @@ gimp_text_tool_constructed (GObject *object)
   GimpTextTool    *text_tool = GIMP_TEXT_TOOL (object);
   GimpTextOptions *options   = GIMP_TEXT_TOOL_GET_OPTIONS (text_tool);
 
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   gimp_rectangle_tool_constructor (object);
 
@@ -1109,7 +1109,8 @@ gimp_text_tool_proxy_notify (GimpText         *text,
   if (! text_tool->text)
     return;
 
-  if ((pspec->flags & G_PARAM_READWRITE) == G_PARAM_READWRITE)
+  if ((pspec->flags & G_PARAM_READWRITE) == G_PARAM_READWRITE &&
+      pspec->owner_type == GIMP_TYPE_TEXT)
     {
       gimp_text_tool_block_drawing (text_tool);
 
@@ -1167,11 +1168,10 @@ gimp_text_tool_text_notify (GimpText         *text,
       g_signal_handlers_block_by_func (text_tool->buffer,
                                        gimp_text_tool_buffer_end_edit,
                                        text_tool);
-
-      if (pspec->name[0] == 't')
-        gimp_text_buffer_set_text (text_tool->buffer, text->text);
-      else
+      if (text->markup)
         gimp_text_buffer_set_markup (text_tool->buffer, text->markup);
+      else
+        gimp_text_buffer_set_text (text_tool->buffer, text->text);
 
       g_signal_handlers_unblock_by_func (text_tool->buffer,
                                          gimp_text_tool_buffer_end_edit,

@@ -82,11 +82,10 @@ typedef struct
   FILE         *outfile;
   gboolean      has_alpha;
   gint          rowstride;
-  guchar       *temp;
   guchar       *data;
   guchar       *src;
-  GimpDrawable *drawable;
-  GimpPixelRgn  pixel_rgn;
+  GeglBuffer   *buffer;
+  const Babl   *format;
   const gchar  *file_name;
   gboolean      abort_me;
   guint         source_id;
@@ -167,9 +166,6 @@ background_error_exit (j_common_ptr cinfo)
 static gboolean
 background_jpeg_save (PreviewPersistent *pp)
 {
-  guchar *t;
-  guchar *s;
-  gint    i, j;
   gint    yend;
 
   if (pp->abort_me || (pp->cinfo.next_scanline >= pp->cinfo.image_height))
@@ -187,11 +183,10 @@ background_jpeg_save (PreviewPersistent *pp)
       fclose (pp->outfile);
       jpeg_destroy_compress (&(pp->cinfo));
 
-      g_free (pp->temp);
       g_free (pp->data);
 
-      if (pp->drawable)
-        gimp_drawable_detach (pp->drawable);
+      if (pp->buffer)
+        g_object_unref (pp->buffer);
 
       /* display the preview stuff */
       if (!pp->abort_me)
@@ -231,27 +226,20 @@ background_jpeg_save (PreviewPersistent *pp)
         {
           yend = pp->cinfo.next_scanline + pp->tile_height;
           yend = MIN (yend, pp->cinfo.image_height);
-          gimp_pixel_rgn_get_rect (&pp->pixel_rgn, pp->data, 0,
-                                   pp->cinfo.next_scanline,
-                                   pp->cinfo.image_width,
-                                   (yend - pp->cinfo.next_scanline));
+          gegl_buffer_get (pp->buffer,
+                           GEGL_RECTANGLE (0, pp->cinfo.next_scanline,
+                                           pp->cinfo.image_width,
+                                           (yend - pp->cinfo.next_scanline)),
+                           1.0,
+                           pp->format,
+                           pp->data,
+                           GEGL_AUTO_ROWSTRIDE,
+                           GEGL_ABYSS_NONE);
           pp->src = pp->data;
         }
 
-      t = pp->temp;
-      s = pp->src;
-      i = pp->cinfo.image_width;
-
-      while (i--)
-        {
-          for (j = 0; j < pp->cinfo.input_components; j++)
-            *t++ = *s++;
-          if (pp->has_alpha)  /* ignore alpha channel */
-            s++;
-        }
-
+      jpeg_write_scanlines (&(pp->cinfo), (JSAMPARRAY) &(pp->src), 1);
       pp->src += pp->rowstride;
-      jpeg_write_scanlines (&(pp->cinfo), (JSAMPARRAY) &(pp->temp), 1);
 
       return TRUE;
     }
@@ -265,25 +253,21 @@ save_image (const gchar  *filename,
             gboolean      preview,
             GError      **error)
 {
-  GimpPixelRgn   pixel_rgn;
-  GimpDrawable  *drawable;
   GimpImageType  drawable_type;
+  GeglBuffer    *buffer = NULL;
+  const Babl    *format;
   GimpParasite  *parasite;
   static struct jpeg_compress_struct cinfo;
   static struct my_error_mgr         jerr;
   JpegSubsampling             subsampling;
   FILE     * volatile outfile;
-  guchar   *temp, *t;
   guchar   *data;
-  guchar   *src, *s;
+  guchar   *src;
   gboolean  has_alpha;
   gint      rowstride, yend;
-  gint      i, j;
 
-  drawable = gimp_drawable_get (drawable_ID);
   drawable_type = gimp_drawable_type (drawable_ID);
-  gimp_pixel_rgn_init (&pixel_rgn, drawable,
-                       0, 0, drawable->width, drawable->height, FALSE, FALSE);
+  buffer = gimp_drawable_get_buffer (drawable_ID);
 
   if (! preview)
     gimp_progress_init_printf (_("Saving '%s'"),
@@ -309,8 +293,8 @@ save_image (const gchar  *filename,
       jpeg_destroy_compress (&cinfo);
       if (outfile)
         fclose (outfile);
-      if (drawable)
-        gimp_drawable_detach (drawable);
+      if (buffer)
+        g_object_unref (buffer);
 
       return FALSE;
     }
@@ -341,22 +325,34 @@ save_image (const gchar  *filename,
   switch (drawable_type)
     {
     case GIMP_RGB_IMAGE:
+      /* # of color components per pixel */
+      cinfo.input_components = 3;
+      has_alpha = FALSE;
+      format = babl_format ("R'G'B' u8");
+      break;
+
     case GIMP_GRAY_IMAGE:
       /* # of color components per pixel */
-      cinfo.input_components = drawable->bpp;
+      cinfo.input_components = 1;
       has_alpha = FALSE;
+      format = babl_format ("Y' u8");
       break;
 
     case GIMP_RGBA_IMAGE:
+      /* # of color components per pixel (minus the GIMP alpha channel) */
+      cinfo.input_components = 4 - 1;
+      has_alpha = TRUE;
+      format = babl_format ("R'G'B' u8");
+      break;
+
     case GIMP_GRAYA_IMAGE:
       /* # of color components per pixel (minus the GIMP alpha channel) */
-      cinfo.input_components = drawable->bpp - 1;
+      cinfo.input_components = 2 - 1;
       has_alpha = TRUE;
+      format = babl_format ("Y' u8");
       break;
 
     case GIMP_INDEXED_IMAGE:
-      return FALSE;
-
     default:
       return FALSE;
     }
@@ -367,8 +363,8 @@ save_image (const gchar  *filename,
    * Four fields of the cinfo struct must be filled in:
    */
   /* image width and height, in pixels */
-  cinfo.image_width  = drawable->width;
-  cinfo.image_height = drawable->height;
+  cinfo.image_width  = gegl_buffer_get_width (buffer);
+  cinfo.image_height = gegl_buffer_get_height (buffer);
   /* colorspace of input image */
   cinfo.in_color_space = (drawable_type == GIMP_RGB_IMAGE ||
                           drawable_type == GIMP_RGBA_IMAGE)
@@ -648,8 +644,7 @@ save_image (const gchar  *filename,
    * more if you wish, though.
    */
   /* JSAMPLEs per row in image_buffer */
-  rowstride = drawable->bpp * drawable->width;
-  temp = g_new (guchar, cinfo.image_width * cinfo.input_components);
+  rowstride = cinfo.input_components * cinfo.image_width;
   data = g_new (guchar, rowstride * gimp_tile_height ());
 
   /* fault if cinfo.next_scanline isn't initially a multiple of
@@ -672,10 +667,9 @@ save_image (const gchar  *filename,
       pp->outfile     = outfile;
       pp->has_alpha   = has_alpha;
       pp->rowstride   = rowstride;
-      pp->temp        = temp;
       pp->data        = data;
-      pp->drawable    = drawable;
-      pp->pixel_rgn   = pixel_rgn;
+      pp->buffer      = buffer;
+      pp->format      = format;
       pp->src         = NULL;
       pp->file_name   = filename;
       pp->abort_me    = FALSE;
@@ -701,27 +695,20 @@ save_image (const gchar  *filename,
         {
           yend = cinfo.next_scanline + gimp_tile_height ();
           yend = MIN (yend, cinfo.image_height);
-          gimp_pixel_rgn_get_rect (&pixel_rgn, data,
-                                   0, cinfo.next_scanline,
-                                   cinfo.image_width,
-                                   (yend - cinfo.next_scanline));
+          gegl_buffer_get (buffer,
+                           GEGL_RECTANGLE (0, cinfo.next_scanline,
+                                           cinfo.image_width,
+                                           (yend - cinfo.next_scanline)),
+                           1.0,
+                           format,
+                           data,
+                           GEGL_AUTO_ROWSTRIDE,
+                           GEGL_ABYSS_NONE);
           src = data;
         }
 
-      t = temp;
-      s = src;
-      i = cinfo.image_width;
-
-      while (i--)
-        {
-          for (j = 0; j < cinfo.input_components; j++)
-            *t++ = *s++;
-          if (has_alpha)  /* ignore alpha channel */
-            s++;
-        }
-
+      jpeg_write_scanlines (&cinfo, (JSAMPARRAY) &src, 1);
       src += rowstride;
-      jpeg_write_scanlines (&cinfo, (JSAMPARRAY) &temp, 1);
 
       if ((cinfo.next_scanline % 32) == 0)
         gimp_progress_update ((gdouble) cinfo.next_scanline /
@@ -739,13 +726,12 @@ save_image (const gchar  *filename,
   jpeg_destroy_compress (&cinfo);
 
   /* free the temporary buffer */
-  g_free (temp);
   g_free (data);
 
   /* And we're done! */
   gimp_progress_update (1.0);
 
-  gimp_drawable_detach (drawable);
+  g_object_unref (buffer);
 
   return TRUE;
 }
@@ -794,12 +780,6 @@ destroy_preview (void)
       prev_p->abort_me = TRUE;   /* signal the background save to stop */
       background_jpeg_save (prev_p);
       g_source_remove (id);
-    }
-
-  if (drawable_global)
-    {
-      gimp_drawable_detach (drawable_global);
-      drawable_global = NULL;
     }
 
   if (gimp_image_is_valid (preview_image_ID) &&
@@ -1044,6 +1024,9 @@ save_dialog (void)
   g_signal_connect (toggle, "toggled",
                     G_CALLBACK (gimp_toggle_button_update),
                     &jsvals.save_xmp);
+  g_signal_connect (toggle, "toggled",
+                    G_CALLBACK (make_preview),
+                    NULL);
 
   gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (toggle),
                                 jsvals.save_xmp && has_metadata);
@@ -1500,7 +1483,7 @@ create_thumbnail (gint32    image_ID,
                   gdouble   quality,
                   guchar  **thumbnail_buffer)
 {
-  GimpDrawable               *drawable;
+  int                         width, height;
   gint                        req_width, req_height, bpp, rbpp;
   guchar                     *thumbnail_data = NULL;
   struct jpeg_compress_struct cinfo;
@@ -1510,13 +1493,18 @@ create_thumbnail (gint32    image_ID,
   guchar                     *buf = NULL;
   gint                        i;
 
-  drawable = gimp_drawable_get (drawable_ID);
+  {
+    GeglBuffer *buffer = gimp_drawable_get_buffer (drawable_ID);
+    width  = gegl_buffer_get_width (buffer);
+    height = gegl_buffer_get_height (buffer);
+    g_object_unref (buffer);
+  }
 
   req_width  = 196;
   req_height = 196;
 
-  if (MIN (drawable->width, drawable->height) < 196)
-    req_width = req_height = MIN(drawable->width, drawable->height);
+  if (MIN (width, height) < 196)
+    req_width = req_height = MIN(width, height);
 
   thumbnail_data = gimp_drawable_get_thumbnail_data (drawable_ID,
                                                      &req_width, &req_height,
@@ -1565,9 +1553,6 @@ create_thumbnail (gint32    image_ID,
           g_free (tbuffer2);
           tbuffer2 = NULL;
         }
-
-      if (drawable)
-        gimp_drawable_detach (drawable);
 
       return 0;
     }
@@ -1650,12 +1635,6 @@ create_thumbnail (gint32    image_ID,
     {
       g_free (buf);
       buf = NULL;
-    }
-
-  if (drawable)
-    {
-      gimp_drawable_detach (drawable);
-      drawable = NULL;
     }
 
   *thumbnail_buffer = tbuffer;

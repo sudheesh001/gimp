@@ -16,6 +16,306 @@
 
 # "Perlized" from C source by Manish Singh <yosh@gimp.org>
 
+sub plug_in_alienmap2 {
+    $blurb = 'Alter colors in various psychedelic ways';
+
+    $help = <<'HELP';
+No help yet. Just try it and you'll see!
+HELP
+
+    &std_pdb_compat('gegl:alien-map');
+    $date = '2013';
+
+    @inargs = (
+	{ name => 'run_mode', type => 'enum GimpRunMode', dead => 1,
+	  desc => 'The run mode' },
+	{ name => 'image', type => 'image', dead => 1,
+	  desc => 'Input image (unused)' },
+	{ name => 'drawable', type => 'drawable',
+	  desc => 'Input drawable' },
+	{ name => 'redfrequency', type => '0 <= float <= 20',
+	  desc => 'Red/hue component frequency factor' },
+	{ name => 'redangle', type => '0 <= float <= 360',
+	  desc => 'Red/hue component angle factor (0-360)' },
+	{ name => 'greenfrequency', type => '0 <= float <= 20',
+	  desc => 'Green/saturation component frequency factor' },
+	{ name => 'greenangle', type => '0 <= float <= 360',
+	  desc => 'Green/saturation component angle factor (0-360)' },
+	{ name => 'bluefrequency', type => '0 <= float <= 20',
+	  desc => 'Blue/luminance component frequency factor' },
+	{ name => 'blueangle', type => '0 <= float <= 360',
+	  desc => 'Blue/luminance component angle factor (0-360)' },
+	{ name => 'colormodel', type => '0 <= int8 <= 1',
+	  desc => 'Color model { RGB-MODEL (0), HSL-MODEL (1) }' },
+	{ name => 'redmode', type => '0 <= int8 <= 1',
+	  desc => 'Red/hue application mode { TRUE, FALSE }' },
+	{ name => 'greenmode', type => '0 <= int8 <= 1',
+	  desc => 'Green/saturation application mode { TRUE, FALSE }' },
+	{ name => 'bluemode', type => '0 <= int8 <= 1',
+	  desc => 'Blue/luminance application mode { TRUE, FALSE }' }
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                 GIMP_PDB_ITEM_CONTENT, error) &&
+      gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
+    {
+      GeglNode *node =
+        gegl_node_new_child (NULL,
+                             "operation", "gegl:alien-map",
+			     "color-model",      (gint)     colormodel,
+                             "cpn-1-frequency",  (gdouble)  redfrequency,
+                             "cpn-2-frequency",  (gdouble)  greenfrequency,
+                             "cpn-3-frequency",  (gdouble)  bluefrequency,
+                             "cpn-1-phaseshift", (gdouble)  redangle,
+                             "cpn-2-phaseshift", (gdouble)  greenangle,
+                             "cpn-3-phaseshift", (gdouble)  blueangle,
+                             "cpn-1-keep",       (gboolean) !redmode,
+                             "cpn-2-keep",       (gboolean) !greenmode,
+                             "cpn-3-keep",       (gboolean) !bluemode,
+                             NULL);
+
+      gimp_drawable_apply_operation (drawable, progress,
+                                     C_("undo-type", "Alien Map"),
+                                     node);
+
+      g_object_unref (node);
+    }
+  else
+    success = FALSE;
+}
+CODE
+    );
+}
+
+sub plug_in_antialias {
+    $blurb = 'Antialias using the Scale3X edge-extrapolation algorithm';
+
+    $help = <<'HELP';
+No more help.
+HELP
+
+    &std_pdb_compat('gegl:antialias');
+    $date = '2013';
+
+    @inargs = (
+	{ name => 'run_mode', type => 'enum GimpRunMode', dead => 1,
+	  desc => 'The run mode' },
+	{ name => 'image', type => 'image', dead => 1,
+	  desc => 'Input image (unused)' },
+	{ name => 'drawable', type => 'drawable',
+	  desc => 'Input drawable' }
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                 GIMP_PDB_ITEM_CONTENT, error) &&
+      gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
+    {
+      GeglNode *node =
+        gegl_node_new_child (NULL,
+                             "operation", "gegl:antialias",
+                             NULL);
+
+      gimp_drawable_apply_operation (drawable, progress,
+                                     C_("undo-type", "Antialias"),
+                                     node);
+
+      g_object_unref (node);
+    }
+  else
+    success = FALSE;
+}
+CODE
+    );
+}
+
+sub plug_in_autocrop {
+    $blurb = 'Remove empty borders from the image';
+
+    $help = <<'HELP';
+Remove empty borders from the image.
+HELP
+
+    &std_pdb_misc;
+    $date = '1997';
+
+    @inargs = (
+	{ name => 'run_mode', type => 'enum GimpRunMode', dead => 1,
+	  desc => 'The run mode' },
+	{ name => 'image', type => 'image',
+	  desc => 'Input image)' },
+	{ name => 'drawable', type => 'drawable',
+	  desc => 'Input drawable' }
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                 GIMP_PDB_ITEM_CONTENT, error))
+    {
+      gint x1, y1, x2, y2;
+
+      if (gimp_pickable_auto_shrink (GIMP_PICKABLE (drawable),
+                                     0, 0,
+                                     gimp_item_get_width  (GIMP_ITEM (drawable)),
+                                     gimp_item_get_height (GIMP_ITEM (drawable)),
+                                     &x1, &y1, &x2, &y2))
+        {
+          gint off_x, off_y;
+
+          gimp_item_get_offset (GIMP_ITEM (drawable), &off_x, &off_y);
+
+          x1 += off_x; x2 += off_x;
+          y1 += off_y; y2 += off_y;
+
+          gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_ITEM_RESIZE,
+                                       _("Autocrop image"));
+
+          gimp_image_crop (image, context,
+                           x2 - x1, y2 - y1, -x1, -y1, TRUE);
+
+          gimp_image_undo_group_end (image);
+        }
+    }
+  else
+    success = FALSE;
+}
+CODE
+    );
+}
+
+sub plug_in_autocrop_layer {
+    $blurb = 'Crop the active layer based on empty borders of the input drawable';
+
+    $help = <<'HELP';
+Crop the active layer of the input "image" based on empty borders of the input "drawable".
+\n\nThe input drawable serves as a base for detecting cropping extents (transparency or background color), and is not necessarily the cropped layer (the current active layer).
+HELP
+
+    &std_pdb_misc;
+    $date = '1997';
+
+    @inargs = (
+	{ name => 'run_mode', type => 'enum GimpRunMode', dead => 1,
+	  desc => 'The run mode' },
+	{ name => 'image', type => 'image',
+	  desc => 'Input image)' },
+	{ name => 'drawable', type => 'drawable',
+	  desc => 'Input drawable' }
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                 GIMP_PDB_ITEM_CONTENT, error))
+    {
+      GimpLayer *layer = gimp_image_get_active_layer (image);
+      gint       x1, y1, x2, y2;
+
+      if (layer &&
+          gimp_pickable_auto_shrink (GIMP_PICKABLE (drawable),
+                                     0, 0,
+                                     gimp_item_get_width  (GIMP_ITEM (drawable)),
+                                     gimp_item_get_height (GIMP_ITEM (drawable)),
+                                     &x1, &y1, &x2, &y2))
+        {
+          gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_ITEM_RESIZE,
+                                       _("Autocrop layer"));
+
+          gimp_item_resize (GIMP_ITEM (layer), context,
+                            x2 - x1, y2 - y1, -x1, -y1);
+
+          gimp_image_undo_group_end (image);
+        }
+    }
+  else
+    success = FALSE;
+}
+CODE
+    );
+}
+
+sub plug_in_colors_channel_mixer {
+    $blurb = 'Alter colors by mixing RGB Channels';
+
+    $help = <<'HELP';
+This plug-in mixes the RGB channels.
+HELP
+
+    &std_pdb_compat('gegl:channel-mixer');
+    $date = '2013';
+
+    @inargs = (
+	{ name => 'run_mode', type => 'enum GimpRunMode', dead => 1,
+	  desc => 'The run mode' },
+	{ name => 'image', type => 'image', dead => 1,
+	  desc => 'Input image (unused)' },
+	{ name => 'drawable', type => 'drawable',
+	  desc => 'Input drawable' },
+	{ name => 'monochrome', type => '0 <= int32 <= 1',
+	  desc => 'Monochrome { TRUE, FALSE }' },
+	{ name => 'rr_gain', type => '-2 <= float <= 2',
+	  desc => 'Set the red gain for the red channel' },
+	{ name => 'rg_gain', type => '-2 <= float <= 2',
+	  desc => 'Set the green gain for the red channel' },
+	{ name => 'rb_gain', type => '-2 <= float <= 2',
+	  desc => 'Set the blue gain for the red channel' },
+	{ name => 'gr_gain', type => '-2 <= float <= 2',
+	  desc => 'Set the red gain for the green channel' },
+	{ name => 'gg_gain', type => '-2 <= float <= 2',
+	  desc => 'Set the green gain for the green channel' },
+	{ name => 'gb_gain', type => '-2 <= float <= 2',
+	  desc => 'Set the blue gain for the green channel' },
+	{ name => 'br_gain', type => '-2 <= float <= 2',
+	  desc => 'Set the red gain for the blue channel' },
+	{ name => 'bg_gain', type => '-2 <= float <= 2',
+	  desc => 'Set the green gain for the blue channel' },
+	{ name => 'bb_gain', type => '-2 <= float <= 2',
+	  desc => 'Set the blue gain for the blue channel' },
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                 GIMP_PDB_ITEM_CONTENT, error) &&
+      gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
+    {
+      GeglNode *node =
+        gegl_node_new_child (NULL,
+                             "operation", "gegl:channel-mixer",
+			     "monochrome", (gboolean) monochrome,
+                             "rr-gain", (gdouble) rr_gain,
+                             "rg-gain", (gdouble) rg_gain,
+                             "rb-gain", (gdouble) rb_gain,
+                             "gr-gain", (gdouble) gr_gain,
+                             "gg-gain", (gdouble) gg_gain,
+                             "gb-gain", (gdouble) gb_gain,
+                             "br-gain", (gdouble) br_gain,
+                             "bg-gain", (gdouble) bg_gain,
+                             "bb-gain", (gdouble) bb_gain,
+                             NULL);
+
+      gimp_drawable_apply_operation (drawable, progress,
+                                     C_("undo-type", "Channel Mixer"),
+                                     node);
+
+      g_object_unref (node);
+    }
+  else
+    success = FALSE;
+}
+CODE
+    );
+}
+
 sub plug_in_colortoalpha {
     $blurb = 'Convert a specified color to transparency';
 
@@ -41,7 +341,8 @@ HELP
     %invoke = (
 	code => <<'CODE'
 {
-  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL, TRUE, error) &&
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                 GIMP_PDB_ITEM_CONTENT, error) &&
       gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
     {
       /* XXX: fixme disable for gray, and add alpha when needed */
@@ -59,6 +360,248 @@ HELP
                                      node);
 
       g_object_unref (node);
+    }
+  else
+    success = FALSE;
+}
+CODE
+    );
+}
+
+sub plug_in_cubism {
+    $blurb = 'Convert the image into randomly rotated square blobs';
+
+    $help = <<'HELP';
+Convert the image into randomly rotated square blobs.
+HELP
+
+    &std_pdb_compat('gegl:cubism');
+    $date = '2013';
+
+    @inargs = (
+	{ name => 'run_mode', type => 'enum GimpRunMode', dead => 1,
+	  desc => 'The run mode' },
+	{ name => 'image', type => 'image', dead => 1,
+	  desc => 'Input image (unused)' },
+	{ name => 'drawable', type => 'drawable',
+	  desc => 'Input drawable' },
+	{ name => 'tile_size', type => '0.0 <= float <= 100.0',
+	  desc => 'Average diameter of each tile (in pixels)' },
+	{ name => 'tile_saturation', type => '0.0 <= float <= 10.0',
+	  desc => 'Expand tiles by this amount' },
+	{ name => 'bg_color', type => '0 <= int32 <= 1',
+	  desc => 'Background color { BLACK (0), BG (1) }' }
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                 GIMP_PDB_ITEM_CONTENT, error) &&
+      gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
+    {
+      GimpRGB    color;
+      GeglColor *gegl_color;
+      GeglNode  *node;
+
+      if (bg_color)
+        {
+          gimp_context_get_background (context, &color);
+          gimp_rgb_set_alpha (&color, 0.0);
+        }
+      else
+        {
+          gimp_rgba_set (&color, 0.0, 0.0, 0.0, 0.0);
+        }
+
+      gegl_color = gimp_gegl_color_new (&color);
+
+      node = gegl_node_new_child (NULL,
+                                  "operation",       "gegl:cubism",
+                                  "tile-size",       tile_size,
+                                  "tile-saturation", tile_saturation,
+                                  "bg-color",        gegl_color,
+                                  NULL);
+      g_object_unref (gegl_color);
+
+      gimp_drawable_apply_operation (drawable, progress,
+                                     C_("undo-type", "Cubism"),
+                                     node);
+
+      g_object_unref (node);
+    }
+  else
+    success = FALSE;
+}
+CODE
+    );
+}
+
+sub plug_in_mblur {
+    $blurb = 'Simulate movement using directional blur';
+
+    $help = <<'HELP';
+This plug-in simulates the effect seen when
+photographing a moving object at a slow shutter
+speed. Done by adding multiple displaced copies.
+HELP
+
+    &std_pdb_compat('gegl:motion-blur-linear, -zoom, -cirular');
+    $date = '2013';
+
+    @inargs = (
+	{ name => 'run_mode', type => 'enum GimpRunMode', dead => 1,
+	  desc => 'The run mode' },
+	{ name => 'image', type => 'image', dead => 1,
+	  desc => 'Input image (unused)' },
+	{ name => 'drawable', type => 'drawable',
+	  desc => 'Input drawable' },
+	{ name => 'type', type => '0 <= int32 <= 2',
+	  desc => 'Type of motion blur { LINEAR (0), RADIAL (1), ZOOM (2) }' },
+	{ name => 'length', type => 'float',
+	  desc => 'Length' },
+	{ name => 'angle', type => '0 <= float <= 360',
+	  desc => 'Angle' },
+	{ name => 'center_x', type => 'float',
+	  desc => 'Center X' },
+	{ name => 'center_y', type => 'float',
+	  desc => 'Center Y' }
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                 GIMP_PDB_ITEM_CONTENT, error) &&
+      gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
+    {
+      GeglNode *node = NULL;
+
+      if (type == 0)
+        {
+          node =  gegl_node_new_child (NULL,
+                                       "operation", "gegl:motion-blur-linear",
+                                       "length",    length,
+                                       "angle",     angle,
+                                        NULL);
+        }
+      else if (type == 1)
+        {
+          node =  gegl_node_new_child (NULL,
+                                       "operation", "gegl:motion-blur-circular",
+                                       "center-x",  center_x,
+                                       "center-y",  center_y,
+                                       "angle",     angle,
+                                        NULL);
+        }
+      else if (type == 2)
+        {
+	  gdouble factor = CLAMP (length / 256.0, 0.0, 1.0);
+          node =  gegl_node_new_child (NULL,
+                                       "operation", "gegl:motion-blur-zoom",
+                                       "center-x",  center_x,
+                                       "center-y",  center_y,
+                                       "factor",    factor,
+                                        NULL);
+        }
+
+      if (node != NULL)
+        {
+          gimp_drawable_apply_operation (drawable, progress,
+                                         C_("undo-type", "Motion Blur"),
+                                         node);
+
+          g_object_unref (node);
+        }
+      else
+        success = FALSE;
+
+    }
+  else
+    success = FALSE;
+}
+CODE
+    );
+}
+
+sub plug_in_mblur_inward {
+    $blurb = 'Simulate movement using directional blur';
+
+    $help = <<'HELP';
+This procedure is equivalent to plug-in-mblur but 
+performs the zoom blur inward instead of outward.
+HELP
+
+    &std_pdb_compat('gegl:motion-blur-linear, -zoom, -cirular');
+    $date = '2013';
+
+    @inargs = (
+	{ name => 'run_mode', type => 'enum GimpRunMode', dead => 1,
+	  desc => 'The run mode' },
+	{ name => 'image', type => 'image', dead => 1,
+	  desc => 'Input image (unused)' },
+	{ name => 'drawable', type => 'drawable',
+	  desc => 'Input drawable' },
+	{ name => 'type', type => '0 <= int32 <= 2',
+	  desc => 'Type of motion blur { LINEAR (0), RADIAL (1), ZOOM (2) }' },
+	{ name => 'length', type => 'float',
+	  desc => 'Length' },
+	{ name => 'angle', type => '0 <= float <= 360',
+	  desc => 'Angle' },
+	{ name => 'center_x', type => 'float',
+	  desc => 'Center X' },
+	{ name => 'center_y', type => 'float',
+	  desc => 'Center Y' }
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                 GIMP_PDB_ITEM_CONTENT, error) &&
+      gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
+    {
+      GeglNode *node = NULL;
+
+      if (type == 0)
+        {
+          node =  gegl_node_new_child (NULL,
+                                       "operation", "gegl:motion-blur-linear",
+                                       "length",    length,
+                                       "angle",     angle,
+                                        NULL);
+        }
+      else if (type == 1)
+        {
+          node =  gegl_node_new_child (NULL,
+                                       "operation", "gegl:motion-blur-circular",
+                                       "center-x",  center_x,
+                                       "center-y",  center_y,
+                                       "angle",     angle,
+                                        NULL);
+        }
+      else if (type == 2)
+        {
+          gdouble factor = CLAMP (-length / (256.0 - length), -10.0, 0.0);
+          node =  gegl_node_new_child (NULL,
+                                       "operation", "gegl:motion-blur-zoom",
+                                       "center-x",  center_x,
+                                       "center-y",  center_y,
+                                       "factor",    factor,
+                                        NULL);
+        }
+
+      if (node != NULL)
+        {
+          gimp_drawable_apply_operation (drawable, progress,
+                                         C_("undo-type", "Motion Blur"),
+                                         node);
+
+          g_object_unref (node);
+        }
+      else
+        success = FALSE;
+
     }
   else
     success = FALSE;
@@ -92,12 +635,13 @@ HELP
     %invoke = (
 	code => <<'CODE'
 {
-  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL, TRUE, error) &&
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                 GIMP_PDB_ITEM_CONTENT, error) &&
       gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
     {
       GeglNode *node =
         gegl_node_new_child (NULL,
-                             "operation", "gegl:pixelise",
+                             "operation", "gegl:pixelize",
                              "size-x",    pixel_width,
                              "size-y",    pixel_width,
                              NULL);
@@ -142,12 +686,13 @@ HELP
     %invoke = (
 	code => <<'CODE'
 {
-  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL, TRUE, error) &&
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                 GIMP_PDB_ITEM_CONTENT, error) &&
       gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
     {
       GeglNode *node =
         gegl_node_new_child (NULL,
-                             "operation", "gegl:pixelise",
+                             "operation", "gegl:pixelize",
                              "size-x",    pixel_width,
                              "size-y",    pixel_height,
                              NULL);
@@ -198,12 +743,13 @@ HELP
     %invoke = (
 	code => <<'CODE'
 {
-  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL, TRUE, error) &&
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                 GIMP_PDB_ITEM_CONTENT, error) &&
       gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
     {
       GeglNode *node =
         gegl_node_new_child (NULL,
-                             "operation", "gegl:polar-coords",
+                             "operation", "gegl:polar-coordinates",
                              "depth",     circle,
                              "angle",     angle,
                              "bw",        backwards, /* XXX name */
@@ -213,6 +759,242 @@ HELP
 
       gimp_drawable_apply_operation (drawable, progress,
                                      C_("undo-type", "Polar Coordinates"),
+                                     node);
+
+      g_object_unref (node);
+    }
+  else
+    success = FALSE;
+}
+CODE
+    );
+}
+
+sub plug_in_randomize_hurl {
+    $blurb = 'Completely randomize a fraction of pixels';
+
+    $help = <<'HELP';
+This plug-in "hurls" randomly-valued pixels onto the selection or
+image.  You may select the percentage of pixels to modify and the
+number of times to repeat the process.
+HELP
+
+    &std_pdb_compat('gegl:noise-hurl');
+    $date = '2013';
+
+    @inargs = (
+	{ name => 'run_mode', type => 'enum GimpRunMode', dead => 1,
+	  desc => 'The run mode' },
+	{ name => 'image', type => 'image', dead => 1,
+	  desc => 'Input image (unused)' },
+	{ name => 'drawable', type => 'drawable',
+	  desc => 'Input drawable' },
+        { name => 'rndm_pct', type => '1.0 <= float <= 100.0',
+          desc => 'Randomization percentage' },
+        { name => 'rndm_rcount', type => '1.0 <= float <= 100.0',
+          desc => 'Repeat count' },
+        { name => 'randomize', type => 'boolean',
+          desc => 'Use random seed' },
+        { name => 'seed', type => 'int32',
+          desc => 'Seed value (used only if randomize is FALSE)' }
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                 GIMP_PDB_ITEM_CONTENT, error) &&
+      gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
+    {
+      GeglNode *node;
+
+      if (randomize)
+        seed = g_random_int ();
+
+      node =
+        gegl_node_new_child (NULL,
+                             "operation",  "gegl:noise-hurl",
+                             "seed",       seed,
+                             "pct-random", rndm_pct,
+                             "repeat",     (gint) rndm_rcount,
+                             NULL);
+
+      gimp_drawable_apply_operation (drawable, progress,
+                                     C_("undo-type", "Random Hurl"),
+                                     node);
+
+      g_object_unref (node);
+    }
+  else
+    success = FALSE;
+}
+CODE
+    );
+}
+
+sub plug_in_randomize_pick {
+    $blurb = 'Randomly interchange some pixels with neighbors';
+
+    $help = <<'HELP';
+This plug-in replaces a pixel with a random adjacent pixel.  You may
+select the percentage of pixels to modify and the number of times to
+repeat the process.
+HELP
+
+    &std_pdb_compat('gegl:noise-pick');
+    $date = '2013';
+
+    @inargs = (
+	{ name => 'run_mode', type => 'enum GimpRunMode', dead => 1,
+	  desc => 'The run mode' },
+	{ name => 'image', type => 'image', dead => 1,
+	  desc => 'Input image (unused)' },
+	{ name => 'drawable', type => 'drawable',
+	  desc => 'Input drawable' },
+        { name => 'rndm_pct', type => '1.0 <= float <= 100.0',
+          desc => 'Randomization percentage' },
+        { name => 'rndm_rcount', type => '1.0 <= float <= 100.0',
+          desc => 'Repeat count' },
+        { name => 'randomize', type => 'boolean',
+          desc => 'Use random seed' },
+        { name => 'seed', type => 'int32',
+          desc => 'Seed value (used only if randomize is FALSE)' }
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                 GIMP_PDB_ITEM_CONTENT, error) &&
+      gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
+    {
+      GeglNode *node;
+
+      if (randomize)
+        seed = g_random_int ();
+
+      node =
+        gegl_node_new_child (NULL,
+                             "operation",  "gegl:noise-pick",
+                             "seed",       seed,
+                             "pct-random", rndm_pct,
+                             "repeat",     (gint) rndm_rcount,
+                             NULL);
+
+      gimp_drawable_apply_operation (drawable, progress,
+                                     C_("undo-type", "Random Pick"),
+                                     node);
+
+      g_object_unref (node);
+    }
+  else
+    success = FALSE;
+}
+CODE
+    );
+}
+
+sub plug_in_randomize_slur {
+    $blurb = 'Randomly slide some pixels downward (similar to melting';
+
+    $help = <<'HELP';
+This plug-in "slurs" (melts like a bunch of icicles) an image.  You may
+select the percentage of pixels to modify and the number of times to
+repeat the process.
+HELP
+
+    &std_pdb_compat('gegl:noise-slur');
+    $date = '2013';
+
+    @inargs = (
+	{ name => 'run_mode', type => 'enum GimpRunMode', dead => 1,
+	  desc => 'The run mode' },
+	{ name => 'image', type => 'image', dead => 1,
+	  desc => 'Input image (unused)' },
+	{ name => 'drawable', type => 'drawable',
+	  desc => 'Input drawable' },
+        { name => 'rndm_pct', type => '1.0 <= float <= 100.0',
+          desc => 'Randomization percentage' },
+        { name => 'rndm_rcount', type => '1.0 <= float <= 100.0',
+          desc => 'Repeat count' },
+        { name => 'randomize', type => 'boolean',
+          desc => 'Use random seed' },
+        { name => 'seed', type => 'int32',
+          desc => 'Seed value (used only if randomize is FALSE)' }
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                 GIMP_PDB_ITEM_CONTENT, error) &&
+      gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
+    {
+      GeglNode *node;
+
+      if (randomize)
+        seed = g_random_int ();
+
+      node =
+        gegl_node_new_child (NULL,
+                             "operation",  "gegl:noise-slur",
+                             "seed",       seed,
+                             "pct-random", rndm_pct,
+                             "repeat",     (gint) rndm_rcount,
+                             NULL);
+
+      gimp_drawable_apply_operation (drawable, progress,
+                                     C_("undo-type", "Random Slur"),
+                                     node);
+
+      g_object_unref (node);
+    }
+  else
+    success = FALSE;
+}
+CODE
+    );
+}
+
+sub plug_in_red_eye_removal {
+    $blurb = 'Remove the red eye effect caused by camera flashes';
+
+    $help = <<'HELP';
+This procedure removes the red eye effect caused by camera flashes by
+using a percentage based red color threshold.  Make a selection
+containing the eyes, and apply the filter while adjusting the
+threshold to accurately remove the red eyes.
+HELP
+
+    &std_pdb_compat('gegl:red-eye-removal');
+    $date = '2013';
+
+    @inargs = (
+	{ name => 'run_mode', type => 'enum GimpRunMode', dead => 1,
+	  desc => 'The run mode' },
+	{ name => 'image', type => 'image', dead => 1,
+	  desc => 'Input image (unused)' },
+	{ name => 'drawable', type => 'drawable',
+	  desc => 'Input drawable' },
+	{ name => 'threshold', type => '0 <= int32 <= 100',
+	  desc => 'Red eye threshold in percent' }
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                 GIMP_PDB_ITEM_CONTENT, error) &&
+      gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
+    {
+      GeglNode *node =
+        gegl_node_new_child (NULL,
+                             "operation", "gegl:red-eye-removal",
+                             "threshold", (gdouble) (threshold - 50) / 50.0 * 0.2 + 0.4,
+                             NULL);
+
+      gimp_drawable_apply_operation (drawable, progress,
+                                     C_("undo-type", "Red Eye Removal"),
                                      node);
 
       g_object_unref (node);
@@ -247,7 +1029,8 @@ HELP
     %invoke = (
 	code => <<'CODE'
 {
-  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL, TRUE, error) &&
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                 GIMP_PDB_ITEM_CONTENT, error) &&
       gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error) &&
       gimp_drawable_has_alpha (drawable))
     {
@@ -264,6 +1047,110 @@ HELP
 
       gimp_drawable_apply_operation (drawable, progress,
                                      C_("undo-type", "Semi-Flatten"),
+                                     node);
+
+      g_object_unref (node);
+    }
+  else
+    success = FALSE;
+}
+CODE
+    );
+}
+
+sub plug_in_shift {
+    $blurb = 'Shift each row or column of pixels by a random amount';
+
+    $help = <<'HELP';
+Shifts the pixels of the specified drawable. Each row or column will
+be displaced a random value of pixels.
+HELP
+
+    &std_pdb_compat('gegl:shift');
+    $date = '2013';
+
+    @inargs = (
+	{ name => 'run_mode', type => 'enum GimpRunMode', dead => 1,
+	  desc => 'The run mode' },
+	{ name => 'image', type => 'image', dead => 1,
+	  desc => 'Input image (unused)' },
+	{ name => 'drawable', type => 'drawable',
+	  desc => 'Input drawable' },
+	{ name => 'shift_amount', type => '0 <= int32 <= 200',
+	  desc => 'Shift amount' },
+	{ name => 'orientation', type => '0 <= int32 <= 1',
+	  desc => 'Orientation { ORIENTATION-VERTICAL (0), ORIENTATION-HORIZONTAL (1) }' }
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                 GIMP_PDB_ITEM_CONTENT, error) &&
+      gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
+    {
+      GeglNode *node =
+        gegl_node_new_child (NULL,
+                             "operation", "gegl:shift",
+                             "shift",     shift_amount / 2,
+                             "direction", orientation ? 0 : 1,
+                             NULL);
+
+      gimp_drawable_apply_operation (drawable, progress,
+                                     C_("undo-type", "Shift"),
+                                     node);
+
+      g_object_unref (node);
+    }
+  else
+    success = FALSE;
+}
+CODE
+    );
+}
+
+sub plug_in_spread {
+    $blurb = 'Move pixels around randomly';
+
+    $help = <<'HELP';
+Spreads the pixels of the specified drawable.  Pixels are randomly
+moved to another location whose distance varies from the original by
+the horizontal and vertical spread amounts.
+HELP
+
+    &std_pdb_compat('gegl:noise-spread');
+    $date = '2013';
+
+    @inargs = (
+	{ name => 'run_mode', type => 'enum GimpRunMode', dead => 1,
+	  desc => 'The run mode' },
+	{ name => 'image', type => 'image', dead => 1,
+	  desc => 'Input image (unused)' },
+	{ name => 'drawable', type => 'drawable',
+	  desc => 'Input drawable' },
+	{ name => 'spread_amount_x', type => '0 <= float <= 200',
+	  desc => 'Horizontal spread amount' },
+	{ name => 'spread_amount_y', type => '0 <= float <= 200',
+	  desc => 'Vertical spread amount' }
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                 GIMP_PDB_ITEM_CONTENT, error) &&
+      gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
+    {
+      GeglNode *node =
+        gegl_node_new_child (NULL,
+                             "operation", "gegl:noise-spread",
+                             "amount-x",  (gint) spread_amount_x,
+                             "amount-y",  (gint) spread_amount_y,
+                             "seed",      (guint) g_random_int (),
+                             NULL);
+
+      gimp_drawable_apply_operation (drawable, progress,
+                                     C_("undo-type", "Spread"),
                                      node);
 
       g_object_unref (node);
@@ -299,7 +1186,8 @@ HELP
     %invoke = (
 	code => <<'CODE'
 {
-  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL, TRUE, error) &&
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                 GIMP_PDB_ITEM_CONTENT, error) &&
       gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error) &&
       gimp_drawable_has_alpha (drawable))
     {
@@ -311,6 +1199,50 @@ HELP
 
       gimp_drawable_apply_operation (drawable, progress,
                                      C_("undo-type", "Threshold Alpha"),
+                                     node);
+
+      g_object_unref (node);
+    }
+  else
+    success = FALSE;
+}
+CODE
+    );
+}
+
+sub plug_in_make_seamless {
+    $blurb = 'Alters edges to make the image seamlessly tileable';
+
+    $help = <<'HELP';
+This plugin creates a seamless tileable from the input drawable.
+HELP
+
+    &std_pdb_compat('gegl:tile-seamless');
+    $date = '2013';
+
+    @inargs = (
+	{ name => 'run_mode', type => 'enum GimpRunMode', dead => 1,
+	  desc => 'The run mode' },
+	{ name => 'image', type => 'image', dead => 1,
+	  desc => 'Input image (unused)' },
+	{ name => 'drawable', type => 'drawable',
+	  desc => 'Input drawable' }
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                 GIMP_PDB_ITEM_CONTENT, error) &&
+      gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
+    {
+      GeglNode *node =
+        gegl_node_new_child (NULL,
+                             "operation", "gegl:tile-seamless",
+                             NULL);
+
+      gimp_drawable_apply_operation (drawable, progress,
+                                     C_("undo-type", "Tile Seamless"),
                                      node);
 
       g_object_unref (node);
@@ -348,7 +1280,8 @@ HELP
     %invoke = (
 	code => <<'CODE'
 {
-  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL, TRUE, error) &&
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                 GIMP_PDB_ITEM_CONTENT, error) &&
       gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
     {
       GeglNode *node =
@@ -369,22 +1302,173 @@ CODE
     );
 }
 
+sub plug_in_waves {
+    $blurb = 'Distort the image with waves';
+
+    $help = <<'HELP';
+Distort the image with waves.
+HELP
+
+    &std_pdb_compat('gegl:waves');
+    $date = '2013';
+
+    @inargs = (
+	{ name => 'run_mode', type => 'enum GimpRunMode', dead => 1,
+	  desc => 'The run mode' },
+	{ name => 'image', type => 'image', dead => 1,
+	  desc => 'Input image (unused)' },
+	{ name => 'drawable', type => 'drawable',
+	  desc => 'Input drawable' },
+	{ name => 'amplitude', type => '0 <= float <= 101',
+	  desc => 'The Amplitude of the Waves' },
+	{ name => 'phase', type => '-360 <= float <= 360',
+	  desc => 'The Phase of the Waves' },
+	{ name => 'wavelength', type => '0.1 <= float <= 50',
+	  desc => 'The Wavelength of the Waves' },
+	{ name => 'type', type => 'boolean',
+	  desc => 'Type of waves: { 0 = smeared, 1 = black }' },
+	{ name => 'reflective', type => 'boolean', dead => 1,
+	  desc => 'Use Reflection (not implemented)' }
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                 GIMP_PDB_ITEM_CONTENT, error) &&
+      gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
+    {
+      GeglNode *node;
+      gdouble   width  = gimp_item_get_width  (GIMP_ITEM (drawable));
+      gdouble   height = gimp_item_get_height (GIMP_ITEM (drawable));
+      gdouble   aspect;
+
+      while (phase < 0)
+        phase += 360.0;
+
+      phase = fmod (phase, 360.0);
+
+      aspect = CLAMP (width / height, 0.1, 10.0);
+
+      node = gegl_node_new_child (NULL,
+                                 "operation", "gegl:waves",
+                                 "x",         width  / 2.0,
+                                 "y",         height / 2.0,
+                                 "amplitude", amplitude,
+                                 "phi",       (phase - 180.0) / 180.0,
+                                 "period",    wavelength * 2.0,
+                                 "aspect",    aspect,
+                                 "clamp",     ! type,
+                                 NULL);
+
+      gimp_drawable_apply_operation (drawable, progress,
+                                     C_("undo-type", "Waves"),
+                                     node);
+
+      g_object_unref (node);
+    }
+  else
+    success = FALSE;
+}
+CODE
+    );
+}
+
+sub plug_in_whirl_pinch {
+    $blurb = 'Distort an image by whirling and pinching';
+
+    $help = <<'HELP';
+Distorts the image by whirling and pinching, which are two common
+center-based, circular distortions.  Whirling is like projecting the
+image onto the surface of water in a toilet and flushing.  Pinching is
+similar to projecting the image onto an elastic surface and pressing
+or pulling on the center of the surface.
+HELP
+
+    &std_pdb_compat('gegl:whirl-pinch');
+    $date = '2013';
+
+    @inargs = (
+	{ name => 'run_mode', type => 'enum GimpRunMode', dead => 1,
+	  desc => 'The run mode' },
+	{ name => 'image', type => 'image', dead => 1,
+	  desc => 'Input image (unused)' },
+	{ name => 'drawable', type => 'drawable',
+	  desc => 'Input drawable' },
+	{ name => 'whirl', type => '-720 <= float <= 720',
+	  desc => 'Whirl angle (degrees)' },
+	{ name => 'pinch', type => '-1 <= float <= 1',
+	  desc => 'Pinch amount' },
+	{ name => 'radius', type => '0 <= float <= 2',
+	  desc => 'Radius (1.0 is the largest circle that fits in the image, and 2.0 goes all the way to the corners)' }
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                 GIMP_PDB_ITEM_CONTENT, error) &&
+      gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
+    {
+      GeglNode *node =
+        gegl_node_new_child (NULL,
+                             "operation", "gegl:whirl-pinch",
+                             "whirl",     whirl,
+                             "pinch",     pinch,
+                             "radius",    radius,
+                             NULL);
+
+      gimp_drawable_apply_operation (drawable, progress,
+                                     C_("undo-type", "Whirl and Pinch"),
+                                     node);
+
+      g_object_unref (node);
+    }
+  else
+    success = FALSE;
+}
+CODE
+    );
+}
+
 
 @headers = qw("libgimpbase/gimpbase.h"
+              "libgimpmath/gimpmath.h"
               "gegl/gimp-gegl-utils.h"
               "core/gimpcontext.h"
               "core/gimpdrawable.h"
               "core/gimpdrawable-operation.h"
+              "core/gimpimage-crop.h"
+              "core/gimpimage-undo.h"
+              "core/gimppickable.h"
+              "core/gimppickable-auto-shrink.h"
               "gimppdb-utils.h"
               "gimp-intl.h");
 
-@procs = qw(plug_in_colortoalpha
+@procs = qw(plug_in_alienmap2
+            plug_in_antialias
+            plug_in_autocrop
+            plug_in_autocrop_layer
+            plug_in_colors_channel_mixer
+            plug_in_colortoalpha
+	    plug_in_cubism
+            plug_in_mblur
+            plug_in_mblur_inward
             plug_in_pixelize
             plug_in_pixelize2
             plug_in_polar_coords
+	    plug_in_red_eye_removal
+            plug_in_randomize_hurl
+            plug_in_randomize_pick
+            plug_in_randomize_slur
             plug_in_semiflatten
-	    plug_in_threshold_alpha
-            plug_in_vinvert);
+            plug_in_shift
+	    plug_in_spread
+            plug_in_threshold_alpha
+            plug_in_make_seamless
+            plug_in_vinvert
+	    plug_in_waves
+            plug_in_whirl_pinch);
 
 %exports = (app => [@procs], lib => []);
 

@@ -32,7 +32,7 @@
 #include "widgets/gimpwidgets-utils.h"
 
 #include "display/gimpdisplay.h"
-#include "display/gimptooldialog.h"
+#include "display/gimptoolgui.h"
 
 #include "gimpcolorpickeroptions.h"
 #include "gimpcolorpickertool.h"
@@ -61,12 +61,14 @@ static void   gimp_color_picker_tool_oper_update   (GimpTool            *tool,
 
 static void   gimp_color_picker_tool_picked        (GimpColorTool       *color_tool,
                                                     GimpColorPickState   pick_state,
+                                                    gdouble              x,
+                                                    gdouble              y,
                                                     const Babl          *sample_format,
                                                     const GimpRGB       *color,
                                                     gint                 color_index);
 
 static void   gimp_color_picker_tool_info_create   (GimpColorPickerTool *picker_tool);
-static void   gimp_color_picker_tool_info_response (GtkWidget           *widget,
+static void   gimp_color_picker_tool_info_response (GimpToolGui         *gui,
                                                     gint                 response_id,
                                                     GimpColorPickerTool *picker_tool);
 static void   gimp_color_picker_tool_info_update   (GimpColorPickerTool *picker_tool,
@@ -130,8 +132,7 @@ gimp_color_picker_tool_constructed (GObject *object)
 {
   GimpTool *tool = GIMP_TOOL (object);
 
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   gimp_color_tool_enable (GIMP_COLOR_TOOL (object),
                           GIMP_COLOR_TOOL_GET_OPTIONS (tool));
@@ -151,11 +152,11 @@ gimp_color_picker_tool_control (GimpTool       *tool,
       break;
 
     case GIMP_TOOL_ACTION_HALT:
-      if (picker_tool->dialog)
+      if (picker_tool->gui)
         {
-          gtk_widget_destroy (picker_tool->dialog);
+          g_object_unref (picker_tool->gui);
 
-          picker_tool->dialog       = NULL;
+          picker_tool->gui          = NULL;
           picker_tool->color_area   = NULL;
           picker_tool->color_frame1 = NULL;
           picker_tool->color_frame2 = NULL;
@@ -222,7 +223,7 @@ gimp_color_picker_tool_oper_update (GimpTool         *tool,
       gchar           *status_help = NULL;
       GdkModifierType  shift_mod = 0;
 
-      if (! picker_tool->dialog)
+      if (! picker_tool->gui)
         shift_mod = GDK_SHIFT_MASK;
 
       switch (options->pick_mode)
@@ -272,6 +273,8 @@ gimp_color_picker_tool_oper_update (GimpTool         *tool,
 static void
 gimp_color_picker_tool_picked (GimpColorTool      *color_tool,
                                GimpColorPickState  pick_state,
+                               gdouble             x,
+                               gdouble             y,
                                const Babl         *sample_format,
                                const GimpRGB      *color,
                                gint                color_index)
@@ -281,14 +284,15 @@ gimp_color_picker_tool_picked (GimpColorTool      *color_tool,
 
   options = GIMP_COLOR_PICKER_TOOL_GET_OPTIONS (color_tool);
 
-  if (options->use_info_window && ! picker_tool->dialog)
+  if (options->use_info_window && ! picker_tool->gui)
     gimp_color_picker_tool_info_create (picker_tool);
 
-  if (picker_tool->dialog)
+  if (picker_tool->gui)
     gimp_color_picker_tool_info_update (picker_tool, sample_format,
                                         color, color_index);
 
   GIMP_COLOR_TOOL_CLASS (parent_class)->picked (color_tool, pick_state,
+                                                x, y,
                                                 sample_format, color,
                                                 color_index);
 }
@@ -297,37 +301,32 @@ static void
 gimp_color_picker_tool_info_create (GimpColorPickerTool *picker_tool)
 {
   GimpTool  *tool = GIMP_TOOL (picker_tool);
-  GtkWidget *content_area;
   GtkWidget *hbox;
   GtkWidget *frame;
   GimpRGB    color;
 
   g_return_if_fail (tool->drawable != NULL);
 
-  picker_tool->dialog = gimp_tool_dialog_new (tool->tool_info,
-                                              gimp_display_get_shell (tool->display),
-                                              _("Color Picker Information"),
+  picker_tool->gui = gimp_tool_gui_new (tool->tool_info,
+                                        _("Color Picker Information"),
+                                        FALSE,
 
-                                              GTK_STOCK_CLOSE,
-                                              GTK_RESPONSE_CLOSE,
+                                        GTK_STOCK_CLOSE,
+                                        GTK_RESPONSE_CLOSE,
 
-                                              NULL);
+                                        NULL);
 
-  gtk_window_set_focus_on_map (GTK_WINDOW (picker_tool->dialog), FALSE);
+  gimp_tool_gui_set_focus_on_map (picker_tool->gui, FALSE);
+  gimp_tool_gui_set_viewable (picker_tool->gui,
+                              GIMP_VIEWABLE (tool->drawable));
 
-  gimp_viewable_dialog_set_viewable (GIMP_VIEWABLE_DIALOG (picker_tool->dialog),
-                                     GIMP_VIEWABLE (tool->drawable),
-                                     GIMP_CONTEXT (gimp_tool_get_options (tool)));
-
-  g_signal_connect (picker_tool->dialog, "response",
+  g_signal_connect (picker_tool->gui, "response",
                     G_CALLBACK (gimp_color_picker_tool_info_response),
                     picker_tool);
 
-  content_area = gtk_dialog_get_content_area (GTK_DIALOG (picker_tool->dialog));
-
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-  gtk_container_set_border_width (GTK_CONTAINER (hbox), 6);
-  gtk_box_pack_start (GTK_BOX (content_area), hbox, FALSE, FALSE, 0);
+  gtk_box_pack_start (GTK_BOX (gimp_tool_gui_get_vbox (picker_tool->gui)),
+                      hbox, FALSE, FALSE, 0);
   gtk_widget_show (hbox);
 
   picker_tool->color_frame1 = gimp_color_frame_new ();
@@ -363,7 +362,7 @@ gimp_color_picker_tool_info_create (GimpColorPickerTool *picker_tool)
 }
 
 static void
-gimp_color_picker_tool_info_response (GtkWidget           *widget,
+gimp_color_picker_tool_info_response (GimpToolGui         *gui,
                                       gint                 response_id,
                                       GimpColorPickerTool *picker_tool)
 {
@@ -380,11 +379,10 @@ gimp_color_picker_tool_info_update (GimpColorPickerTool *picker_tool,
 {
   GimpTool *tool = GIMP_TOOL (picker_tool);
 
-  gimp_tool_dialog_set_shell (GIMP_TOOL_DIALOG (picker_tool->dialog),
-                              gimp_display_get_shell (tool->display));
-  gimp_viewable_dialog_set_viewable (GIMP_VIEWABLE_DIALOG (picker_tool->dialog),
-                                     GIMP_VIEWABLE (tool->drawable),
-                                     GIMP_CONTEXT (gimp_tool_get_options (tool)));
+  gimp_tool_gui_set_shell (picker_tool->gui,
+                           gimp_display_get_shell (tool->display));
+  gimp_tool_gui_set_viewable (picker_tool->gui,
+                              GIMP_VIEWABLE (tool->drawable));
 
   gimp_color_area_set_color (GIMP_COLOR_AREA (picker_tool->color_area),
                              color);
@@ -394,9 +392,5 @@ gimp_color_picker_tool_info_update (GimpColorPickerTool *picker_tool,
   gimp_color_frame_set_color (GIMP_COLOR_FRAME (picker_tool->color_frame2),
                               sample_format, color, color_index);
 
-  /*  don't use gtk_window_present() because it would focus the dialog  */
-  if (gtk_widget_get_visible (picker_tool->dialog))
-    gdk_window_show (gtk_widget_get_window (picker_tool->dialog));
-  else
-    gtk_widget_show (picker_tool->dialog);
+  gimp_tool_gui_show (picker_tool->gui);
 }

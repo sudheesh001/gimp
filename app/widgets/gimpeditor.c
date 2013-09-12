@@ -227,8 +227,7 @@ gimp_editor_constructed (GObject *object)
 {
   GimpEditor *editor = GIMP_EDITOR (object);
 
-  if (G_OBJECT_CLASS (parent_class)->constructed)
-    G_OBJECT_CLASS (parent_class)->constructed (object);
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   if (! editor->priv->popup_data)
     editor->priv->popup_data = editor;
@@ -652,6 +651,7 @@ gimp_editor_add_action_button (GimpEditor  *editor,
 
   stock_id = gtk_action_get_stock_id (action);
   tooltip  = g_strdup (gtk_action_get_tooltip (action));
+  help_id  = g_object_get_qdata (G_OBJECT (action), GIMP_HELP_ID);
 
   old_child = gtk_bin_get_child (GTK_BIN (button));
 
@@ -718,8 +718,6 @@ gimp_editor_add_action_button (GimpEditor  *editor,
                         G_CALLBACK (gimp_editor_button_extended_clicked),
                         NULL);
     }
-
-  help_id = g_object_get_qdata (G_OBJECT (action), GIMP_HELP_ID);
 
   if (tooltip || help_id)
     gimp_help_set_help_data_with_markup (button, tooltip, help_id);

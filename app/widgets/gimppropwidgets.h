@@ -24,93 +24,90 @@
 
 /*  GParamBoolean  */
 
-GtkWidget * gimp_prop_expanding_frame_new (GObject     *config,
-                                           const gchar *property_name,
-                                           const gchar *button_label,
-                                           GtkWidget   *child,
-                                           GtkWidget  **button);
+GtkWidget * gimp_prop_expanding_frame_new   (GObject       *config,
+                                             const gchar   *property_name,
+                                             const gchar   *button_label,
+                                             GtkWidget     *child,
+                                             GtkWidget    **button);
 
 
 /*  GParamEnum  */
 
-GtkWidget * gimp_prop_paint_mode_menu_new (GObject     *config,
-                                           const gchar *property_name,
-                                           gboolean     with_behind_mode,
-                                           gboolean     with_replace_modes);
+GtkWidget * gimp_prop_paint_mode_menu_new   (GObject       *config,
+                                             const gchar   *property_name,
+                                             gboolean       with_behind_mode,
+                                             gboolean       with_replace_modes);
 
 
 /*  GimpParamColor  */
 
-GtkWidget * gimp_prop_color_button_new    (GObject     *config,
-                                           const gchar *property_name,
-                                           const gchar *title,
-                                           gint         width,
-                                           gint         height,
-                                           GimpColorAreaType  type);
+GtkWidget * gimp_prop_color_button_new      (GObject       *config,
+                                             const gchar   *property_name,
+                                             const gchar   *title,
+                                             gint           width,
+                                             gint           height,
+                                             GimpColorAreaType  type);
 
 
 /*  GParamDouble  */
 
-GtkWidget * gimp_prop_scale_button_new    (GObject     *config,
-                                           const gchar *property_name);
-GtkWidget * gimp_prop_spin_scale_new      (GObject     *config,
-                                           const gchar *property_name,
-                                           const gchar *label,
-                                           gdouble      step_increment,
-                                           gdouble      page_increment,
-                                           gint         digits);
-GtkWidget * gimp_prop_opacity_spin_scale_new (GObject     *config,
-                                              const gchar *property_name,
-                                              const gchar *label);
+GtkWidget * gimp_prop_scale_button_new      (GObject       *config,
+                                             const gchar   *property_name);
+GtkWidget * gimp_prop_spin_scale_new        (GObject       *config,
+                                             const gchar   *property_name,
+                                             const gchar   *label,
+                                             gdouble        step_increment,
+                                             gdouble        page_increment,
+                                             gint           digits);
+
+void        gimp_prop_widget_set_factor     (GtkWidget     *widget,
+                                             gdouble        factor,
+                                             gint           digits);
 
 
 /*  GParamObject (GimpViewable)  */
 
-GtkWidget * gimp_prop_view_new            (GObject     *config,
-                                           const gchar *property_name,
-                                           GimpContext *context,
-                                           gint         size);
+GtkWidget * gimp_prop_view_new              (GObject       *config,
+                                             const gchar   *property_name,
+                                             GimpContext   *context,
+                                             gint           size);
 
 
 /*  GParamDouble, GParamDouble, GParamDouble, GParamDouble, GParamBoolean  */
 
-GtkWidget * gimp_prop_number_pair_entry_new
-                                          (GObject     *config,
-                                           const gchar *left_number_property,
-                                           const gchar *right_number_property,
-                                           const gchar *default_left_number_property,
-                                           const gchar *default_right_number_property,
-                                           const gchar *user_override_property,
-                                           gboolean     connect_numbers_changed,
-                                           gboolean     connect_ratio_changed,
-                                           const gchar *separators,
-                                           gboolean     allow_simplification,
-                                           gdouble      min_valid_value,
-                                           gdouble      max_valid_value);
+GtkWidget * gimp_prop_number_pair_entry_new (GObject     *config,
+                                             const gchar *left_number_property,
+                                             const gchar *right_number_property,
+                                             const gchar *default_left_number_property,
+                                             const gchar *default_right_number_property,
+                                             const gchar *user_override_property,
+                                             gboolean     connect_numbers_changed,
+                                             gboolean     connect_ratio_changed,
+                                             const gchar *separators,
+                                             gboolean     allow_simplification,
+                                             gdouble      min_valid_value,
+                                             gdouble      max_valid_value);
+
 
 /*  GParamString  */
 
-GtkWidget * gimp_prop_language_combo_box_new (GObject     *config,
-                                              const gchar *property_name);
-GtkWidget * gimp_prop_language_entry_new     (GObject     *config,
-                                              const gchar *property_name);
+GtkWidget * gimp_prop_language_combo_box_new (GObject      *config,
+                                              const gchar  *property_name);
+GtkWidget * gimp_prop_language_entry_new     (GObject      *config,
+                                              const gchar  *property_name);
 
-GtkWidget * gimp_prop_icon_picker_new        (GObject     *config,
-                                              const gchar *property_name,
-                                              Gimp        *gimp);
+GtkWidget * gimp_prop_icon_picker_new        (GimpViewable *viewable,
+                                              Gimp         *gimp);
 
-/*  A view on all of an object's properties  */
 
-typedef GtkWidget * (* GimpCreatePickerFunc) (gpointer     creator,
-                                              const gchar *property_name,
-                                              const gchar *stock_id,
-                                              const gchar *help_id);
+/*  Utility functions  */
 
-GtkWidget * gimp_prop_table_new (GObject              *config,
-                                 GType                 owner_type,
-                                 GimpContext          *context,
-                                 GimpCreatePickerFunc  create_picker_fnc,
-                                 gpointer              picker_creator);
+gboolean _gimp_prop_widgets_get_numeric_values (GObject     *object,
+                                                GParamSpec  *param_spec,
+                                                gdouble     *value,
+                                                gdouble     *lower,
+                                                gdouble     *upper,
+                                                const gchar *strloc);
 
 
 #endif /* __GIMP_APP_PROP_WIDGETS_H__ */

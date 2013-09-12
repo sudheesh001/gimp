@@ -27,12 +27,12 @@
 
 #include "core-types.h"
 
-#include "gegl/gimp-gegl-nodes.h"
+#include "gegl/gimp-gegl-apply-operation.h"
+#include "gegl/gimp-gegl-mask.h"
+#include "gegl/gimp-gegl-mask-combine.h"
 #include "gegl/gimp-gegl-utils.h"
 
 #include "gimp.h"
-#include "gimp-apply-operation.h"
-#include "gimpchannel.h"
 #include "gimpchannel-combine.h"
 #include "gimpcontext.h"
 #include "gimpdrawable.h"
@@ -137,10 +137,8 @@ gimp_drawable_bucket_fill_internal (GimpDrawable        *drawable,
                                     GimpPattern         *pattern)
 {
   GimpImage   *image;
-  GimpChannel *mask;
   GeglBuffer  *buffer;
   GeglBuffer  *mask_buffer;
-  GeglNode    *apply_opacity;
   gint         x1, y1, x2, y2;
   gint         mask_offset_x = 0;
   gint         mask_offset_y = 0;
@@ -166,31 +164,33 @@ gimp_drawable_bucket_fill_internal (GimpDrawable        *drawable,
    *  contiguous region. If there is a selection, calculate the
    *  intersection of this region with the existing selection.
    */
-  mask = gimp_image_contiguous_region_by_seed (image, drawable,
-                                               sample_merged,
-                                               TRUE,
-                                               threshold,
-                                               fill_transparent,
-                                               fill_criterion,
-                                               (gint) x,
-                                               (gint) y);
+  mask_buffer = gimp_image_contiguous_region_by_seed (image, drawable,
+                                                      sample_merged,
+                                                      TRUE,
+                                                      threshold,
+                                                      fill_transparent,
+                                                      fill_criterion,
+                                                      (gint) x,
+                                                      (gint) y);
 
   if (selection)
     {
-      gint off_x = 0;
-      gint off_y = 0;
+      GimpDrawable *sel;
+      gint          off_x = 0;
+      gint          off_y = 0;
 
       if (! sample_merged)
         gimp_item_get_offset (GIMP_ITEM (drawable), &off_x, &off_y);
 
-      gimp_channel_combine_mask (mask, gimp_image_get_mask (image),
-                                 GIMP_CHANNEL_OP_INTERSECT,
-                                 -off_x, -off_y);
+      sel = GIMP_DRAWABLE (gimp_image_get_mask (image));
+
+      gimp_gegl_mask_combine_buffer (mask_buffer,
+                                     gimp_drawable_get_buffer (sel),
+                                     GIMP_CHANNEL_OP_INTERSECT,
+                                     -off_x, -off_y);
     }
 
-  mask_buffer = gimp_drawable_get_buffer (GIMP_DRAWABLE (mask));
-
-  gimp_channel_bounds (mask, &x1, &y1, &x2, &y2);
+  gimp_gegl_mask_bounds (mask_buffer, &x1, &y1, &x2, &y2);
 
   /*  make sure we handle the mask correctly if it was sample-merged  */
   if (sample_merged)
@@ -246,17 +246,12 @@ gimp_drawable_bucket_fill_internal (GimpDrawable        *drawable,
       break;
     }
 
-  apply_opacity = gimp_gegl_create_apply_opacity_node (mask_buffer,
-                                                       -mask_offset_x,
-                                                       -mask_offset_y,
-                                                       1.0);
-
-  gimp_apply_operation (buffer, NULL, NULL,
-                        apply_opacity,
-                        buffer, NULL);
-
-  g_object_unref (apply_opacity);
-  g_object_unref (mask);
+  gimp_gegl_apply_opacity (buffer, NULL, NULL, buffer,
+                           mask_buffer,
+                           -mask_offset_x,
+                           -mask_offset_y,
+                           1.0);
+  g_object_unref (mask_buffer);
 
   /*  Apply it to the image  */
   gimp_drawable_apply_buffer (drawable, buffer,

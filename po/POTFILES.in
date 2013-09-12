@@ -42,6 +42,7 @@ app/actions/error-console-commands.c
 app/actions/file-actions.c
 app/actions/file-commands.c
 app/actions/filters-actions.c
+app/actions/filters-commands.c
 app/actions/fonts-actions.c
 app/actions/gradient-editor-actions.c
 app/actions/gradient-editor-commands.c
@@ -82,8 +83,7 @@ app/actions/view-actions.c
 app/actions/view-commands.c
 app/actions/window-actions.c
 app/actions/windows-actions.c
-
-app/base/tile-swap.c
+app/actions/windows-commands.c
 
 app/config/config-enums.c
 app/config/gimpconfig-file.c
@@ -130,8 +130,8 @@ app/core/gimp-gui.c
 app/core/gimpimage-arrange.c
 app/core/gimpimage.c
 app/core/gimpimage-colormap.c
-app/core/gimpimage-convert.c
 app/core/gimpimage-convert-precision.c
+app/core/gimpimage-convert-type.c
 app/core/gimpimage-crop.c
 app/core/gimpimagefile.c
 app/core/gimpimage-grid.c
@@ -170,7 +170,8 @@ app/core/gimp-user-install.c
 
 app/dialogs/about-dialog.c
 app/dialogs/channel-options-dialog.c
-app/dialogs/convert-dialog.c
+app/dialogs/convert-precision-dialog.c
+app/dialogs/convert-type-dialog.c
 app/dialogs/data-delete-dialog.c
 app/dialogs/dialogs.c
 app/dialogs/dialogs-constructors.c
@@ -217,6 +218,7 @@ app/display/gimpdisplayshell-dnd.c
 app/display/gimpdisplayshell-filter-dialog.c
 app/display/gimpdisplayshell-handlers.c
 app/display/gimpdisplayshell-layer-select.c
+app/display/gimpdisplayshell-rotate-dialog.c
 app/display/gimpdisplayshell-scale-dialog.c
 app/display/gimpdisplayshell-title.c
 app/display/gimpnavigationeditor.c
@@ -234,6 +236,8 @@ app/operations/gimpcurvesconfig.c
 app/operations/gimplevelsconfig.c
 app/operations/gimpoperationcagecoefcalc.c
 app/operations/gimpoperationcagetransform.c
+app/operations/gimpoperationsemiflatten.c
+app/operations/gimpoperationthresholdalpha.c
 
 app/gui/gui.c
 app/gui/gui-message.c
@@ -322,6 +326,7 @@ app/tools/gimpbucketfilltool.c
 app/tools/gimpbycolorselecttool.c
 app/tools/gimpcageoptions.c
 app/tools/gimpcagetool.c
+app/tools/gimpcloneoptions-gui.c
 app/tools/gimpclonetool.c
 app/tools/gimpcolorbalancetool.c
 app/tools/gimpcolorizetool.c
@@ -377,6 +382,8 @@ app/tools/gimpregionselectoptions.c
 app/tools/gimpregionselecttool.c
 app/tools/gimprotatetool.c
 app/tools/gimpscaletool.c
+app/tools/gimpseamlesscloneoptions.c
+app/tools/gimpseamlessclonetool.c
 app/tools/gimpselectionoptions.c
 app/tools/gimpselectiontool.c
 app/tools/gimpsheartool.c
@@ -389,8 +396,11 @@ app/tools/gimptool.c
 app/tools/gimp-tools.c
 app/tools/gimptransformoptions.c
 app/tools/gimptransformtool.c
+app/tools/gimpunifiedtransformtool.c
 app/tools/gimpvectoroptions.c
 app/tools/gimpvectortool.c
+app/tools/gimpwarpoptions.c
+app/tools/gimpwarptool.c
 app/tools/tools-enums.c
 
 app/vectors/gimpvectors.c
@@ -445,10 +455,12 @@ app/widgets/gimpgradienteditor.c
 app/widgets/gimpgrideditor.c
 app/widgets/gimphelp.c
 app/widgets/gimphistogrameditor.c
+app/widgets/gimpiconpicker.c
 app/widgets/gimpimagecommenteditor.c
 app/widgets/gimpimageprofileview.c
 app/widgets/gimpimagepropview.c
 app/widgets/gimpitemtreeview.c
+app/widgets/gimplanguagestore-parser.c
 app/widgets/gimplayertreeview.c
 app/widgets/gimpmenudock.c
 app/widgets/gimpmessagebox.c
@@ -457,6 +469,7 @@ app/widgets/gimppanedbox.c
 app/widgets/gimppdbdialog.c
 app/widgets/gimpprofilechooserdialog.c
 app/widgets/gimpprogressdialog.c
+app/widgets/gimpproptable.c
 app/widgets/gimppropwidgets.c
 app/widgets/gimpselectiondata.c
 app/widgets/gimpselectioneditor.c

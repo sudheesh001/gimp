@@ -3,15 +3,13 @@
 AM_CPPFLAGS = \
         -DISO_CODES_LOCATION=\"$(ISO_CODES_LOCATION)\"		\
         -DISO_CODES_LOCALEDIR=\"$(ISO_CODES_LOCALEDIR)\"	\
-	-DG_LOG_DOMAIN=\"Gimp-Widgets\"
-
-INCLUDES = \
-	-I$(top_builddir)	\
-	-I$(top_srcdir)		\
-	-I$(top_builddir)/app	\
-	-I$(top_srcdir)/app	\
-	$(GEGL_CFLAGS)		\
-	$(GTK_CFLAGS)		\
+	-DG_LOG_DOMAIN=\"Gimp-Widgets\"				\
+	-I$(top_builddir)					\
+	-I$(top_srcdir)						\
+	-I$(top_builddir)/app					\
+	-I$(top_srcdir)/app					\
+	$(GEGL_CFLAGS)						\
+	$(GTK_CFLAGS)						\
 	-I$(includedir)
 
 noinst_LIBRARIES = libappwidgets.a
@@ -263,12 +261,16 @@ libappwidgets_a_sources = \
 	gimppixbuf.h			\
 	gimppluginaction.c		\
 	gimppluginaction.h		\
+	gimpprefsbox.c			\
+	gimpprefsbox.h			\
 	gimpprofilechooserdialog.c	\
 	gimpprofilechooserdialog.h	\
 	gimpprogressbox.c		\
 	gimpprogressbox.h		\
 	gimpprogressdialog.c		\
 	gimpprogressdialog.h		\
+	gimpproptable.c			\
+	gimpproptable.h			\
 	gimppropwidgets.c		\
 	gimppropwidgets.h		\
 	gimpradioaction.c		\

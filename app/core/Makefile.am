@@ -2,16 +2,14 @@
 
 AM_CPPFLAGS = \
 	-DGIMP_APP_VERSION=\"$(GIMP_APP_VERSION)\"	\
-	-DG_LOG_DOMAIN=\"Gimp-Core\"
-
-INCLUDES = \
-	-I$(top_builddir)	\
-	-I$(top_srcdir)		\
-	-I$(top_builddir)/app	\
-	-I$(top_srcdir)/app	\
-	$(CAIRO_CFLAGS)		\
-	$(GEGL_CFLAGS)		\
-	$(GDK_PIXBUF_CFLAGS)	\
+	-DG_LOG_DOMAIN=\"Gimp-Core\"			\
+	-I$(top_builddir)				\
+	-I$(top_srcdir)					\
+	-I$(top_builddir)/app				\
+	-I$(top_srcdir)/app				\
+	$(CAIRO_CFLAGS)					\
+	$(GEGL_CFLAGS)					\
+	$(GDK_PIXBUF_CFLAGS)				\
 	-I$(includedir)
 
 noinst_LIBRARIES = libappcore.a
@@ -21,8 +19,6 @@ libappcore_a_sources = \
 	core-types.h				\
 	gimp.c					\
 	gimp.h					\
-	gimp-apply-operation.c			\
-	gimp-apply-operation.h			\
 	gimp-cairo.c				\
 	gimp-cairo.h				\
 	gimp-contexts.c				\
@@ -128,6 +124,8 @@ libappcore_a_sources = \
 	gimpdrawable-combine.h			\
 	gimpdrawable-equalize.c			\
 	gimpdrawable-equalize.h			\
+	gimpdrawable-filter.c			\
+	gimpdrawable-filter.h			\
 	gimpdrawable-foreground-extract.c	\
 	gimpdrawable-foreground-extract.h	\
 	gimpdrawable-histogram.c		\
@@ -165,8 +163,12 @@ libappcore_a_sources = \
 	gimperror.h				\
 	gimpfilloptions.c			\
 	gimpfilloptions.h			\
+	gimpfilter.c				\
+	gimpfilter.h				\
 	gimpfilteredcontainer.c			\
 	gimpfilteredcontainer.h			\
+	gimpfilterstack.c			\
+	gimpfilterstack.h			\
 	gimpfloatingselundo.c			\
 	gimpfloatingselundo.h			\
 	gimpgradient.c				\
@@ -197,12 +199,12 @@ libappcore_a_sources = \
 	gimpimage-colormap.h			\
 	gimpimage-contiguous-region.c		\
 	gimpimage-contiguous-region.h		\
-	gimpimage-convert.c			\
-	gimpimage-convert.h			\
 	gimpimage-convert-fsdither.h		\
 	gimpimage-convert-data.h		\
 	gimpimage-convert-precision.c		\
 	gimpimage-convert-precision.h		\
+	gimpimage-convert-type.c		\
+	gimpimage-convert-type.h		\
 	gimpimage-crop.c			\
 	gimpimage-crop.h			\
 	gimpimage-duplicate.c			\
@@ -248,8 +250,6 @@ libappcore_a_sources = \
 	gimpimagefile.h				\
 	gimpimagemap.c				\
 	gimpimagemap.h				\
-	gimpimagemapconfig.c			\
-	gimpimagemapconfig.h			\
 	gimpitem.c				\
 	gimpitem.h				\
 	gimpitem-exclusive.c			\
@@ -315,16 +315,14 @@ libappcore_a_sources = \
 	gimppdbprogress.h			\
 	gimppickable.c				\
 	gimppickable.h				\
-	gimppreviewcache.c			\
-	gimppreviewcache.h			\
+	gimppickable-auto-shrink.c		\
+	gimppickable-auto-shrink.h		\
 	gimpprogress.c				\
 	gimpprogress.h				\
 	gimpprojectable.c			\
 	gimpprojectable.h			\
 	gimpprojection.c			\
 	gimpprojection.h			\
-	gimpprojection-construct.c		\
-	gimpprojection-construct.h		\
 	gimpsamplepoint.c			\
 	gimpsamplepoint.h			\
 	gimpsamplepointundo.c			\
@@ -333,6 +331,8 @@ libappcore_a_sources = \
 	gimpscanconvert.h			\
 	gimpselection.c				\
 	gimpselection.h				\
+	gimpsettings.c				\
+	gimpsettings.h				\
 	gimpstrokeoptions.c			\
 	gimpstrokeoptions.h			\
 	gimpsubprogress.c			\

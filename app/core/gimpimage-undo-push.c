@@ -393,6 +393,38 @@ gimp_image_undo_push_item_linked (GimpImage   *image,
 }
 
 GimpUndo *
+gimp_image_undo_push_item_lock_content (GimpImage   *image,
+                                        const gchar *undo_desc,
+                                        GimpItem    *item)
+{
+  g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
+  g_return_val_if_fail (GIMP_IS_ITEM (item), NULL);
+  g_return_val_if_fail (gimp_item_is_attached (item), NULL);
+
+  return gimp_image_undo_push (image, GIMP_TYPE_ITEM_PROP_UNDO,
+                               GIMP_UNDO_ITEM_LOCK_CONTENT, undo_desc,
+                               GIMP_DIRTY_ITEM_META,
+                               "item", item,
+                               NULL);
+}
+
+GimpUndo *
+gimp_image_undo_push_item_lock_position (GimpImage   *image,
+                                         const gchar *undo_desc,
+                                         GimpItem    *item)
+{
+  g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
+  g_return_val_if_fail (GIMP_IS_ITEM (item), NULL);
+  g_return_val_if_fail (gimp_item_is_attached (item), NULL);
+
+  return gimp_image_undo_push (image, GIMP_TYPE_ITEM_PROP_UNDO,
+                               GIMP_UNDO_ITEM_LOCK_POSITION, undo_desc,
+                               GIMP_DIRTY_ITEM_META,
+                               "item", item,
+                               NULL);
+}
+
+GimpUndo *
 gimp_image_undo_push_item_parasite (GimpImage          *image,
                                     const gchar        *undo_desc,
                                     GimpItem           *item,
@@ -617,6 +649,22 @@ gimp_image_undo_push_text_layer_modified (GimpImage     *image,
   return gimp_image_undo_push (image, GIMP_TYPE_TEXT_UNDO,
                                GIMP_UNDO_TEXT_LAYER_MODIFIED, undo_desc,
                                GIMP_DIRTY_ITEM_META,
+                               "item", layer,
+                               NULL);
+}
+
+GimpUndo *
+gimp_image_undo_push_text_layer_convert (GimpImage     *image,
+                                         const gchar   *undo_desc,
+                                         GimpTextLayer *layer)
+{
+  g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
+  g_return_val_if_fail (GIMP_IS_TEXT_LAYER (layer), NULL);
+  g_return_val_if_fail (gimp_item_is_attached (GIMP_ITEM (layer)), NULL);
+
+  return gimp_image_undo_push (image, GIMP_TYPE_TEXT_UNDO,
+                               GIMP_UNDO_TEXT_LAYER_CONVERT, undo_desc,
+                               GIMP_DIRTY_ITEM,
                                "item", layer,
                                NULL);
 }

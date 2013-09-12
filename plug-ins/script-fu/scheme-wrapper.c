@@ -126,7 +126,7 @@ static const NamedConstant const script_constants[] =
 };
 
 /* The following constants are deprecated. They are
- * included to keep backwards compatability with
+ * included to keep backwards compatibility with
  * older scripts used with version 2.0 of GIMP.
  */
 static const NamedConstant const old_constants[] =
@@ -235,7 +235,7 @@ tinyscheme_init (const gchar *path,
 
   if (path)
     {
-      GList *dir_list = gimp_path_parse (path, 16, TRUE, NULL);
+      GList *dir_list = gimp_path_parse (path, 256, TRUE, NULL);
       GList *list;
 
       for (list = dir_list; list; list = g_list_next (list))
@@ -566,11 +566,9 @@ ts_init_procedures (scheme   *sc,
           gimp_destroy_paramdefs (params, n_params);
           gimp_destroy_paramdefs (return_vals, n_return_vals);
         }
-
-      g_free (proc_list[i]);
     }
 
-  g_free (proc_list);
+  g_strfreev (proc_list);
 }
 
 static gboolean
@@ -1258,13 +1256,19 @@ script_fu_marshal_procedure_call (scheme  *sc,
 
   if (success)
     {
+      /* refuse to refresh scripts from a script, better than crashing
+       * see bug #575830
+       */
+      if (strcmp (proc_name, "script-fu-refresh-scripts"))
+        {
 #if DEBUG_MARSHALL
-      g_printerr ("    calling %s...", proc_name);
+          g_printerr ("    calling %s...", proc_name);
 #endif
-      values = gimp_run_procedure2 (proc_name, &nvalues, nparams, args);
+          values = gimp_run_procedure2 (proc_name, &nvalues, nparams, args);
 #if DEBUG_MARSHALL
-      g_printerr ("  done.\n");
+          g_printerr ("  done.\n");
 #endif
+        }
     }
   else
     {

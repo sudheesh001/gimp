@@ -19,6 +19,7 @@
  *  Screenshot plug-in
  *  Copyright 1998-2007 Sven Neumann <sven@gimp.org>
  *  Copyright 2003      Henrik Brix Andersen <brix@gimp.org>
+ *  Copyright 2012      Simone Karin Lehmann - OS X patches
  *
  *  Any suggestions, bug-reports or patches are very welcome.
  *
@@ -26,6 +27,7 @@
 
 #include "config.h"
 
+#include <stdlib.h> /* for system() on OSX */
 #include <string.h>
 
 #include <libgimp/gimp.h>
@@ -173,7 +175,11 @@ typedef struct
 static ScreenshotValues shootvals =
 {
   SHOOT_WINDOW, /* root window  */
+#ifdef PLATFORM_OSX
+  FALSE,
+#else
   TRUE,         /* include WM decorations */
+#endif
   0,            /* window ID    */
   0,            /* select delay */
   0,            /* coords of region dragged out by pointer */
@@ -197,6 +203,10 @@ static gint32     create_image         (cairo_surface_t  *surface,
                                         const gchar      *name);
 
 static gint32     shoot                (GdkScreen        *screen);
+static gint32     shoot_main           (GdkScreen        *screen);
+#ifdef PLATFORM_OSX
+static gint32     shoot_osx            (GdkScreen        *screen);
+#endif
 static gboolean   shoot_dialog         (GdkScreen       **screen);
 static void       shoot_delay          (gint32            delay);
 static gboolean   shoot_delay_callback (gpointer          data);
@@ -238,16 +248,25 @@ query (void)
 
   gimp_install_procedure (PLUG_IN_PROC,
                           N_("Create an image from an area of the screen"),
-                          "The plug-in allows to take screenshots of an "
+                          "The plug-in takes screenshots of an "
                           "interactively selected window or of the desktop, "
                           "either the whole desktop or an interactively "
                           "selected region. When called non-interactively, it "
                           "may grab the root window or use the window-id "
                           "passed as a parameter.  The last four parameters "
                           "are optional and can be used to specify the corners "
-                          "of the region to be grabbed.",
+                          "of the region to be grabbed."
+#ifdef PLATFORM_OSX
+                          "On Mac OS X, when called non-interactively, the plugin"
+                          "only can take screenshots of the entire root window."
+                          "Grabbing a window or a region is not supported"
+                          "non-interactively. To grab a region or a particular"
+                          "window, you need to use the interactive mode."
+#endif
+                          ,
                           "Sven Neumann <sven@gimp.org>, "
-                          "Henrik Brix Andersen <brix@gimp.org>",
+                          "Henrik Brix Andersen <brix@gimp.org>,"
+                          "Simone Karin Lehmann",
                           "1998 - 2008",
                           "v1.1 (2008/04)",
                           N_("_Screenshot..."),
@@ -269,23 +288,22 @@ run (const gchar      *name,
      gint             *nreturn_vals,
      GimpParam       **return_vals)
 {
-  GimpRunMode        run_mode = param[0].data.d_int32;
+  static GimpParam   values[2];
   GimpPDBStatusType  status   = GIMP_PDB_SUCCESS;
+  GimpRunMode        run_mode;
   GdkScreen         *screen   = NULL;
   gint32             image_ID;
 
-  static GimpParam   values[2];
+  INIT_I18N ();
+  gegl_init (NULL, NULL);
 
-  /* initialize the return of the status */
-  values[0].type          = GIMP_PDB_STATUS;
-  values[0].data.d_status = status;
+  run_mode = param[0].data.d_int32;
 
   *nreturn_vals = 1;
   *return_vals  = values;
 
-  INIT_I18N ();
-
-  gegl_init (NULL, NULL);
+  values[0].type          = GIMP_PDB_STATUS;
+  values[0].data.d_status = status;
 
   /* how are we running today? */
   switch (run_mode)
@@ -326,7 +344,13 @@ run (const gchar      *name,
 
       if (! gdk_init_check (NULL, NULL))
         status = GIMP_PDB_CALLING_ERROR;
-      break;
+
+#ifdef PLATFORM_OSX
+      if (shootvals.shoot_type == SHOOT_WINDOW ||
+          shootvals.shoot_type == SHOOT_REGION)
+        status = GIMP_PDB_CALLING_ERROR;
+#endif
+        break;
 
     case GIMP_RUN_WITH_LAST_VALS:
       /* Possibly retrieve data from a previous run */
@@ -337,6 +361,7 @@ run (const gchar      *name,
       break;
     }
 
+#ifndef PLATFORM_OSX
   if (status == GIMP_PDB_SUCCESS)
     {
       if (shootvals.select_delay > 0)
@@ -350,6 +375,7 @@ run (const gchar      *name,
             status = GIMP_PDB_CANCEL;
         }
     }
+#endif
 
   if (status == GIMP_PDB_SUCCESS)
     {
@@ -937,6 +963,21 @@ get_foreign_window (GdkDisplay *display,
 static gint32
 shoot (GdkScreen *screen)
 {
+#ifdef PLATFORM_OSX
+  /* on Mac OS X, either with X11 (which is a rootless X server) or
+   * as a native quartz build, we have to implement it differently,
+   * without using X and just use the standard OS X screenshot
+   * utility.
+   */
+  return shoot_osx (screen);
+#else
+  return shoot_main (screen);
+#endif
+}
+
+static gint32
+shoot_main (GdkScreen *screen)
+{
   GdkDisplay      *display;
   GdkWindow       *window;
   cairo_surface_t *screenshot;
@@ -1041,6 +1082,81 @@ shoot (GdkScreen *screen)
   return image;
 }
 
+#ifdef PLATFORM_OSX
+/*
+ * Mac OS X uses a rootless X server. This won't let us use
+ * gdk_pixbuf_get_from_drawable() and similar function on the root
+ * window to get the entire screen contents. With a nytive OS X build
+ * we have to do this without X as well.
+ *
+ * Since Mac OS X 10.2 a system utility for screencapturing is
+ * included. We can safely use this, since it's available on every OS
+ * X version GIMP is running on.
+ *
+ * The main drawbacks are that it's not possible to shoot windows or
+ * regions in scripts in noninteractive mode, and that windows always
+ * include decorations, since decorations are different between X11
+ * windows and native OS X app windows. But we can use this switch
+ * to capture the shadow of a window, which is indeed very Mac-ish.
+ *
+ * This routines works well with X11 and as a navtive build
+ */
+static gint32
+shoot_osx (GdkScreen *screen)
+{
+  gint32  image;
+  gchar  *mode    = " ";
+  gchar  *delay   = NULL;
+  gchar  *cursor  = " ";
+  gchar  *command = NULL;
+
+  switch (shootvals.shoot_type)
+    {
+    case SHOOT_REGION:
+      mode = "-is";
+      break;
+
+    case SHOOT_WINDOW:
+      mode = "-iwo";
+      if (shootvals.decorate)
+        mode = "-iw";
+      break;
+
+    case SHOOT_ROOT:
+      mode = " ";
+      break;
+
+    default:
+      break;
+    }
+
+  delay = g_strdup_printf ("-T %i", shootvals.select_delay);
+
+  if (shootvals.show_cursor)
+    cursor = "-C";
+
+  command = g_strjoin (" ",
+                       "/usr/sbin/screencapture",
+                       mode,
+                       cursor,
+                       delay,
+                       "/tmp/screenshot.png",
+                       NULL);
+
+  system ((const char *) command);
+
+  g_free (command);
+  g_free (delay);
+
+  image = gimp_file_load (GIMP_RUN_NONINTERACTIVE,
+                          "/tmp/screenshot.png", "/tmp/screenshot.png");
+  gimp_image_set_filename (image, "screenshot.png");
+
+  return image;
+}
+#endif /* PLATFORM_OSX */
+
+
 /*  Screenshot dialog  */
 
 static void
@@ -1085,7 +1201,9 @@ shoot_dialog (GdkScreen **screen)
   GtkWidget *hbox;
   GtkWidget *label;
   GtkWidget *button;
+#if (defined (HAVE_XFIXES) || defined (HAVE_X11_XMU_WINUTIL_H) || defined (PLATFORM_OSX))
   GtkWidget *toggle;
+#endif
   GtkWidget *spinner;
   GdkPixbuf *pixbuf;
   GSList    *radio_group = NULL;
@@ -1168,7 +1286,7 @@ shoot_dialog (GdkScreen **screen)
                     G_CALLBACK (shoot_radio_button_toggled),
                     notebook);
 
-#ifdef HAVE_X11_XMU_WINUTIL_H
+#if (defined (HAVE_X11_XMU_WINUTIL_H) || defined (PLATFORM_OSX))
   /*  window decorations  */
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
   gtk_box_pack_start (GTK_BOX (vbox), hbox, FALSE, FALSE, 0);
@@ -1207,7 +1325,7 @@ shoot_dialog (GdkScreen **screen)
                     G_CALLBACK (shoot_radio_button_toggled),
                     notebook);
 
-#ifdef HAVE_XFIXES
+#if (defined (HAVE_XFIXES) || defined (PLATFORM_OSX))
   /*  mouse pointer  */
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
   gtk_box_pack_start (GTK_BOX (vbox), hbox, FALSE, FALSE, 0);
